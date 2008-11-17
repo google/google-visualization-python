@@ -53,7 +53,7 @@ string or JSon response for Query object.
 """.strip(),
     author="Amit Weinstein, Misha Seltzer",
     license="Apache 2.0",
-    url="http://code.google.com/???/",
+    url="http://code.google.com/p/google-visualization-python/",
     py_modules=["gviz_api"],
     cmdclass={"test": TestCommand},
 )
