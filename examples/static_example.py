@@ -22,21 +22,24 @@ import gviz_api
 
 page_template = """
 <html>
-  <script src="http://www.google.com/jsapi" type="text/javascript"></script>
-  <script>
-    google.load("visualization", "1", {packages:["table"]});
+  <head>
+  <title>Static example</title>
+    <script src="http://www.google.com/jsapi" type="text/javascript"></script>
+    <script>
+      google.load("visualization", "1", {packages:["table"]});
 
-    google.setOnLoadCallback(drawTable);
-    function drawTable() {
-      %(jscode)s
-      var jscode_table = new google.visualization.Table(document.getElementById('table_div_jscode'));
-      jscode_table.draw(jscode_data, {showRowNumber: true});
+      google.setOnLoadCallback(drawTable);
+      function drawTable() {
+        %(jscode)s
+        var jscode_table = new google.visualization.Table(document.getElementById('table_div_jscode'));
+        jscode_table.draw(jscode_data, {showRowNumber: true});
 
-      var json_table = new google.visualization.Table(document.getElementById('table_div_json'));
-      var json_data = new google.visualization.DataTable(%(json)s, 0.5);
-      json_table.draw(json_data, {showRowNumber: true});
-    }
-  </script>
+        var json_table = new google.visualization.Table(document.getElementById('table_div_json'));
+        var json_data = new google.visualization.DataTable(%(json)s, 0.5);
+        json_table.draw(json_data, {showRowNumber: true});
+      }
+    </script>
+  </head>
   <body>
     <H1>Table created using ToJSCode</H1>
     <div id="table_div_jscode"></div>
