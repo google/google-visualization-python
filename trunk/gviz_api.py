@@ -658,7 +658,8 @@ class DataTable(object):
                                         ",".join(rows_jsons))
     return json
 
-  def ToJSonResponse(self, columns_order=None, order_by=(), req_id=0):
+  def ToJSonResponse(self, columns_order=None, order_by=(), req_id=0,
+                     response_handler="google.visualization.Query.setResponse"):
     """Writes a table as a JSON response that can be returned as-is to a client.
 
     This method writes a JSON response to return to a client in response to a
@@ -670,6 +671,8 @@ class DataTable(object):
       columns_order: Optional. Passed straight to self.ToJSon().
       order_by: Optional. Passed straight to self.ToJSon().
       req_id: Optional. The response id, as retrieved by the request.
+      response_handler: Optional. The response handler, as retrieved by the
+          request.
 
     Returns:
       A JSON response string to be received by JS the visualization Query
@@ -684,5 +687,5 @@ class DataTable(object):
           Visualization Gadgets or from JS code.
     """
     table = self.ToJSon(columns_order, order_by)
-    return ("google.visualization.Query.setResponse({'version':'0.5', "
-            "'reqId':'%s', 'status':'OK', 'table': %s});") % (req_id, table)
+    return ("%s({'version':'0.5', 'reqId':'%s', 'status':'OK', "
+            "'table': %s});") % (response_handler, req_id, table)
