@@ -341,16 +341,26 @@ class DataTableTest(unittest.TestCase):
     req_id = 4
     table = DataTable(description, data)
 
-    start_str = r"google.visualization.Query.setResponse"
+    start_str_default = r"google.visualization.Query.setResponse"
+    start_str_handler = r"MyHandlerFunction"
     default_params = (r"\s*'version'\s*:\s*'0.5'\s*,\s*'reqId'\s*:\s*'%s'\s*,"
                       r"\s*'status'\s*:\s*'OK'\s*" % req_id)
-    regex = re.compile("%s\(\s*\{%s,\s*'table'\s*:\s*{(.*)}\s*\}\s*\);" %
-                       (start_str, default_params))
+    regex1 = re.compile("%s\(\s*\{%s,\s*'table'\s*:\s*{(.*)}\s*\}\s*\);" %
+                        (start_str_default, default_params))
+    regex2 = re.compile("%s\(\s*\{%s,\s*'table'\s*:\s*{(.*)}\s*\}\s*\);" %
+                        (start_str_handler, default_params))
 
-    json_response = table.ToJSonResponse(req_id=req_id)
     json_str = table.ToJSon().strip()
 
-    match = regex.findall(json_response)
+    json_response = table.ToJSonResponse(req_id=req_id)
+    match = regex1.findall(json_response)
+    self.assertEquals(len(match), 1)
+    # We want to match against the json_str without the curly brackets.
+    self.assertEquals(match[0], json_str[1:-1])
+
+    json_response = table.ToJSonResponse(req_id=req_id,
+                                         response_handler=start_str_handler)
+    match = regex2.findall(json_response)
     self.assertEquals(len(match), 1)
     # We want to match against the json_str without the curly brackets.
     self.assertEquals(match[0], json_str[1:-1])
