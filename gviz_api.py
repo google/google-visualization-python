@@ -589,7 +589,7 @@ class DataTable(object):
     return jscode
 
   def ToJSon(self, columns_order=None, order_by=()):
-    """Writes a JSON strong that can be used in a JS DataTable constructor.
+    """Writes a JSON string that can be used in a JS DataTable constructor.
 
     This method writes a JSON string that can be passed directly into a Google
     Visualization API DataTable constructor. Use this output if you are
