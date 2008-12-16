@@ -93,11 +93,18 @@ class DataTableTest(unittest.TestCase):
     # Checking escaping of strings
     problematic_strings = ["control", "new\nline", "",
                            "single'quote", 'double"quote',
-                           r"one\slash", r"two\\slash"]
+                           r"one\slash", r"two\\slash", u"unicode eng",
+                           u"unicode \u05e2\u05d1\u05e8\u05d9\u05ea"]
     for s in problematic_strings:
-      self.assertEquals(s, eval(DataTable.SingleValueToJS(s, "string")))
-      self.assertEquals(
-          s, eval(DataTable.SingleValueToJS(("str", s), "string")[1]))
+      js_value = DataTable.SingleValueToJS(s, "string")
+      if isinstance(js_value, unicode):
+        js_value = "u%s" % js_value
+      self.assertEquals(s, eval(js_value))
+
+      js_value = DataTable.SingleValueToJS(("str", s), "string")[1]
+      if isinstance(js_value, unicode):
+        js_value = "u%s" % js_value
+      self.assertEquals(s, eval(js_value))
 
   def testColumnTypeParser(self):
     # Checking several wrong formats

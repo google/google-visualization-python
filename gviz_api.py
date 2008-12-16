@@ -27,6 +27,7 @@ Google Visualization API.
 __author__ = "Amit Weinstein, Misha Seltzer"
 
 import datetime
+import types
 
 
 class DataTableException(Exception):
@@ -158,20 +159,32 @@ class DataTable(object):
       DataTableException: The value and type did not match in a not-recoverable
                           way, for example given value 'abc' for type 'number'.
     """
+    def _EscapeValue(v):
+      if isinstance(v, unicode):
+        # Here we use repr as in the usual case, but on unicode strings, it
+        # also escapes the unicode characters (which we want to leave as is).
+        # So, after repr() we decode using raw-unicode-escape, which decodes
+        # only the unicode characters, and leaves all the rest (", ', \n and
+        # more) escaped.
+        # We don't take the first character, because repr adds a u in the
+        # beginning of the string. (usual repr output for unicode is u'...').
+        return repr(v).decode("raw-unicode-escape")[1:]
+      # Here we use python built-in escaping mechanism for string using repr.
+      return repr(str(v))
+
     if isinstance(value, tuple):
       # In case of a tuple, we run the same function on the value itself and
       # add the formatted value.
       if len(value) != 2:
         raise DataTableException("Wrong format for value and formatting - %s." %
                                  str(value))
-      if not isinstance(value[1], str):
+      if not isinstance(value[1], types.StringTypes):
         raise DataTableException("Formatted value is not string, given %s." %
                                  type(value[1]))
       js_value = DataTable.SingleValueToJS(value[0], value_type)
       if js_value == "null":
         raise DataTableException("An empty cell can not have formatting.")
-      # Here we use python built-in escaping mechanism for string using repr.
-      return (js_value, repr(str(value[1])))
+      return (js_value, _EscapeValue(value[1]))
 
     # The standard case - no formatting.
     t_value = type(value)
@@ -190,7 +203,7 @@ class DataTable(object):
     elif value_type == "string":
       if isinstance(value, tuple):
         raise DataTableException("Tuple is not allowed as string value.")
-      return repr(str(value))
+      return _EscapeValue(value)
 
     elif value_type == "date":
       if not isinstance(value, (datetime.date, datetime.datetime)):
@@ -238,17 +251,17 @@ class DataTable(object):
     if not description:
       raise DataTableException("Description error: empty description given")
 
-    if not isinstance(description, (str, tuple)):
+    if not isinstance(description, (types.StringTypes, tuple)):
       raise DataTableException("Description error: expected either string or "
                                "tuple, got %s." % type(description))
 
-    if isinstance(description, str):
+    if isinstance(description, types.StringTypes):
       description = (description,)
 
     # According to the tuple's length, we fill the keys
     # We verify everything is of type string
     for elem in description:
-      if not isinstance(elem, str):
+      if not isinstance(elem, types.StringTypes):
         raise DataTableException(("Description error: expected tuple of "
                                   "strings, current element of type %s." %
                                   type(elem)))
@@ -333,7 +346,7 @@ class DataTable(object):
                 'depth': 1, 'container': 'scalar'}]
     """
     # For the recursion step, we check for a scalar object (string or tuple)
-    if isinstance(table_description, (str, tuple)):
+    if isinstance(table_description, (types.StringTypes, tuple)):
       parsed_col = DataTable.ColumnTypeParser(table_description)
       parsed_col["depth"] = depth
       parsed_col["container"] = "scalar"
@@ -493,12 +506,12 @@ class DataTable(object):
       return self.__data
 
     proper_sort_keys = []
-    if isinstance(sort_keys, str) or (
+    if isinstance(sort_keys, types.StringTypes) or (
         isinstance(sort_keys, tuple) and len(sort_keys) == 2 and
         sort_keys[1].lower() in ["asc", "desc"]):
       sort_keys = (sort_keys,)
     for key in sort_keys:
-      if isinstance(key, str):
+      if isinstance(key, types.StringTypes):
         proper_sort_keys.append((key, 1))
       elif (isinstance(key, (list, tuple)) and len(key) == 2 and
             key[1].lower() in ("asc", "desc")):
