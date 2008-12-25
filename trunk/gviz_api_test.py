@@ -312,6 +312,64 @@ class DataTableTest(unittest.TestCase):
     self.assertEqual(json,
                      table.ToJSon())
 
+  def testToCsv(self):
+    init_data_csv = "\n".join(["'A', 'b', 'c'",
+                               "1, '', ''",
+                               "'', 'z', true"])
+    table = DataTable([("a", "number", "A"), "b", ("c", "boolean")],
+                      [[(1, "$1")], [None, "z", True]])
+    self.assertEqual(init_data_csv, table.ToCsv())
+    table.AppendData([[-1, "w", False]])
+    init_data_csv = "%s\n%s" % (init_data_csv, "-1, 'w', false")
+    self.assertEquals(init_data_csv, table.ToCsv())
+
+    init_data_csv = "\n".join([
+        "'T', 'd', 'dt'",
+        "'[1,2,3]', 'new Date(1,1,3)', ''",
+        "'time 2 3 4', 'new Date(2,2,4)', 'new Date(1,1,3,4,5,6)'",
+        "'', 'new Date(3,3,5)', ''"])
+    table = DataTable({("d", "date"): [("t", "timeofday", "T"),
+                                       ("dt", "datetime")]})
+    table.LoadData({date(1, 2, 3): [time(1, 2, 3)],
+                    date(2, 3, 4): [(time(2, 3, 4), "time 2 3 4"),
+                                    datetime(1, 2, 3, 4, 5, 6)],
+                    date(3, 4, 5): []})
+    self.assertEqual(init_data_csv, table.ToCsv(columns_order=["t", "d", "dt"]))
+
+  def testToHtml(self):
+    html_table_header = "<html><body><table border='1'>"
+    html_table_footer = "</table></body></html>"
+    init_data_html = html_table_header + (
+        "<thead><tr>"
+        "<th>A</th><th>b</th><th>c</th>"
+        "</tr></thead>"
+        "<tbody>"
+        "<tr><td>'$1'</td><td></td><td></td></tr>"
+        "<tr><td></td><td>'&lt;z&gt;'</td><td>true</td></tr>"
+        "</tbody>") + html_table_footer
+    table = DataTable([("a", "number", "A"), "b", ("c", "boolean")],
+                      [[(1, "$1")], [None, "<z>", True]])
+    self.assertEqual(init_data_html.replace("\n", ""), table.ToHtml())
+
+    init_data_html = html_table_header + (
+        "<thead><tr>"
+        "<th>T</th><th>d</th><th>dt</th>"
+        "</tr></thead>"
+        "<tbody>"
+        "<tr><td>[1,2,3]</td><td>new Date(1,1,3)</td><td></td></tr>"
+        "<tr><td>'time 2 3 4'</td><td>new Date(2,2,4)</td>"
+        "<td>new Date(1,1,3,4,5,6)</td></tr>"
+        "<tr><td></td><td>new Date(3,3,5)</td><td></td></tr>"
+        "</tbody>") + html_table_footer
+    table = DataTable({("d", "date"): [("t", "timeofday", "T"),
+                                       ("dt", "datetime")]})
+    table.LoadData({date(1, 2, 3): [time(1, 2, 3)],
+                    date(2, 3, 4): [(time(2, 3, 4), "time 2 3 4"),
+                                    datetime(1, 2, 3, 4, 5, 6)],
+                    date(3, 4, 5): []})
+    self.assertEqual(init_data_html.replace("\n", ""),
+                     table.ToHtml(columns_order=["t", "d", "dt"]))
+
   def testOrderBy(self):
     data = [("b", 3), ("a", 3), ("a", 2), ("b", 1)]
     description = ["col1", ("col2", "number", "Second Column")]
