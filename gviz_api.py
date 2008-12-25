@@ -26,6 +26,7 @@ Google Visualization API.
 
 __author__ = "Amit Weinstein, Misha Seltzer"
 
+import cgi
 import datetime
 import types
 
@@ -132,6 +133,21 @@ class DataTable(object):
       self.LoadData(data)
 
   @staticmethod
+  def _EscapeValue(v):
+    """Puts the string in quotes, and escapes any inner quotes and slashes."""
+    if isinstance(v, unicode):
+      # Here we use repr as in the usual case, but on unicode strings, it
+      # also escapes the unicode characters (which we want to leave as is).
+      # So, after repr() we decode using raw-unicode-escape, which decodes
+      # only the unicode characters, and leaves all the rest (", ', \n and
+      # more) escaped.
+      # We don't take the first character, because repr adds a u in the
+      # beginning of the string (usual repr output for unicode is u'...').
+      return repr(v).decode("raw-unicode-escape")[1:]
+    # Here we use python built-in escaping mechanism for string using repr.
+    return repr(str(v))
+
+  @staticmethod
   def SingleValueToJS(value, value_type):
     """Translates a single value and type into a JS value.
 
@@ -159,19 +175,6 @@ class DataTable(object):
       DataTableException: The value and type did not match in a not-recoverable
                           way, for example given value 'abc' for type 'number'.
     """
-    def _EscapeValue(v):
-      if isinstance(v, unicode):
-        # Here we use repr as in the usual case, but on unicode strings, it
-        # also escapes the unicode characters (which we want to leave as is).
-        # So, after repr() we decode using raw-unicode-escape, which decodes
-        # only the unicode characters, and leaves all the rest (", ', \n and
-        # more) escaped.
-        # We don't take the first character, because repr adds a u in the
-        # beginning of the string. (usual repr output for unicode is u'...').
-        return repr(v).decode("raw-unicode-escape")[1:]
-      # Here we use python built-in escaping mechanism for string using repr.
-      return repr(str(v))
-
     if isinstance(value, tuple):
       # In case of a tuple, we run the same function on the value itself and
       # add the formatted value.
@@ -184,7 +187,7 @@ class DataTable(object):
       js_value = DataTable.SingleValueToJS(value[0], value_type)
       if js_value == "null":
         raise DataTableException("An empty cell can not have formatting.")
-      return (js_value, _EscapeValue(value[1]))
+      return (js_value, DataTable._EscapeValue(value[1]))
 
     # The standard case - no formatting.
     t_value = type(value)
@@ -203,7 +206,7 @@ class DataTable(object):
     elif value_type == "string":
       if isinstance(value, tuple):
         raise DataTableException("Tuple is not allowed as string value.")
-      return _EscapeValue(value)
+      return DataTable._EscapeValue(value)
 
     elif value_type == "date":
       if not isinstance(value, (datetime.date, datetime.datetime)):
@@ -486,15 +489,17 @@ class DataTable(object):
         col_values[self.__columns[col_index]["id"]] = key
         self._InnerAppendData(col_values, data[key], col_index + 1)
 
-  def _PreparedData(self, sort_keys=()):
-    """Prepares the data for enumeration - sorting it by sort_keys.
+  def _PreparedData(self, order_by=()):
+    """Prepares the data for enumeration - sorting it by order_by.
 
     Args:
-      sort_keys: list of keys to sort by. Receives a single key to sort by, or
-                 a list of keys for secondary sort. Each key can be a name of a
-                 column, or a tuple containing the name of the column and the
-                 sort direction as second parameter ("asc" or "desc").
-                 For example: ("col1", "desc")
+      order_by: Optional. Specifies the name of the column(s) to sort by, and
+                (optionally) which direction to sort in. Default sort direction
+                is asc. Following formats are accepted:
+                "string_col_name"  -- For a single key in default (asc) order.
+                ("string_col_name", "asc|desc") -- For a single key.
+                [("col_1","asc|desc"), ("col_2","asc|desc")] -- For more than
+                    one column, an array of tuples of (col_name, "asc|desc").
 
     Returns:
       The data sorted by the keys given.
@@ -502,15 +507,15 @@ class DataTable(object):
     Raises:
       DataTableException: Sort direction not in 'asc' or 'desc'
     """
-    if not sort_keys:
+    if not order_by:
       return self.__data
 
     proper_sort_keys = []
-    if isinstance(sort_keys, types.StringTypes) or (
-        isinstance(sort_keys, tuple) and len(sort_keys) == 2 and
-        sort_keys[1].lower() in ["asc", "desc"]):
-      sort_keys = (sort_keys,)
-    for key in sort_keys:
+    if isinstance(order_by, types.StringTypes) or (
+        isinstance(order_by, tuple) and len(order_by) == 2 and
+        order_by[1].lower() in ["asc", "desc"]):
+      order_by = (order_by,)
+    for key in order_by:
       if isinstance(key, types.StringTypes):
         proper_sort_keys.append((key, 1))
       elif (isinstance(key, (list, tuple)) and len(key) == 2 and
@@ -543,13 +548,10 @@ class DataTable(object):
       columns_order: Optional. Specifies the order of columns in the
                      output table. Specify a list of all column IDs in the order
                      in which you want the table created.
-      order_by: Optional. Specifies the name of the column(s) to sort by, and
-                (optionally) which direction to sort in. Default sort direction
-                is asc. Following formats are accepted:
-                "string_col_name"  -- For a single key in default (asc) order.
-                ("string_col_name", "asc|desc") -- For a single key.
-                [("col_1","asc|desc"), ("col_2","asc|desc")] -- For more than
-                    one column, an array of tuples of (col_name, "asc|desc").
+                     Note that you must list all column IDs in this parameter,
+                     if you use it.
+      order_by: Optional. Specifies the name of the column(s) to sort by.
+                Passed as is to _PreparedData.
 
     Returns:
       A string of JS code that, when run, generates a DataTable with the given
@@ -571,7 +573,7 @@ class DataTable(object):
     Raises:
       DataTableException: The data does not match the type.
     """
-    if not columns_order:
+    if columns_order is None:
       columns_order = [col["id"] for col in self.__columns]
     col_dict = dict([(col["id"], col) for col in self.__columns])
 
@@ -601,6 +603,125 @@ class DataTable(object):
           jscode += "%s.setCell(%d, %d, %s);\n" % (name, i, j, value)
     return jscode
 
+  def ToHtml(self, columns_order=None, order_by=()):
+    """Writes the data table as an HTML table code string.
+
+    Args:
+      columns_order: Optional. Specifies the order of columns in the
+                     output table. Specify a list of all column IDs in the order
+                     in which you want the table created.
+                     Note that you must list all column IDs in this parameter,
+                     if you use it.
+      order_by: Optional. Specifies the name of the column(s) to sort by.
+                Passed as is to _PreparedData.
+
+    Returns:
+      An HTML table code string.
+      Example result (the result is without the newlines):
+       <html><body><table border='1'>
+        <thead><tr><th>a</th><th>b</th><th>c</th></tr></thead>
+        <tbody>
+         <tr><td>1</td><td>"z"</td><td>2</td></tr>
+         <tr><td>"3$"</td><td>"w"</td><td></td></tr>
+        </tbody>
+       </table></body></html>
+
+    Raises:
+      DataTableException: The data does not match the type.
+    """
+    table_template = "<html><body><table border='1'>%s</table></body></html>"
+    columns_template = "<thead><tr>%s</tr></thead>"
+    rows_template = "<tbody>%s</tbody>"
+    row_template = "<tr>%s</tr>"
+    header_cell_template = "<th>%s</th>"
+    cell_template = "<td>%s</td>"
+
+    if columns_order is None:
+      columns_order = [col["id"] for col in self.__columns]
+    col_dict = dict([(col["id"], col) for col in self.__columns])
+
+    columns_list = []
+    for col in columns_order:
+      columns_list.append(header_cell_template % col_dict[col]["label"])
+    columns_html = columns_template % "".join(columns_list)
+
+    rows_list = []
+    # We now go over the data and add each row
+    for row in self._PreparedData(order_by):
+      cells_list = []
+      # We add all the elements of this row by their order
+      for col in columns_order:
+        # For empty string we want empty quotes ("").
+        value = ""
+        if col in row and row[col] is not None:
+          value = self.SingleValueToJS(row[col], col_dict[col]["type"])
+        if isinstance(value, tuple):
+          # We have a formatted value and we're going to use it
+          cells_list.append(cell_template % cgi.escape(value[1]))
+        else:
+          cells_list.append(cell_template % cgi.escape(value))
+      rows_list.append(row_template % "".join(cells_list))
+    rows_html = rows_template % "".join(rows_list)
+
+    return table_template % (columns_html + rows_html)
+
+  def ToCsv(self, columns_order=None, order_by=()):
+    """Writes the data table as a CSV string.
+
+    Args:
+      columns_order: Optional. Specifies the order of columns in the
+                     output table. Specify a list of all column IDs in the order
+                     in which you want the table created.
+                     Note that you must list all column IDs in this parameter,
+                     if you use it.
+      order_by: Optional. Specifies the name of the column(s) to sort by.
+                Passed as is to _PreparedData.
+
+    Returns:
+      A CSV string representing the table.
+      Example result:
+       'a', 'b', 'c'
+       1, 'z', 2
+       3, 'w', ''
+
+    Raises:
+      DataTableException: The data does not match the type.
+    """
+    if columns_order is None:
+      columns_order = [col["id"] for col in self.__columns]
+    col_dict = dict([(col["id"], col) for col in self.__columns])
+
+    columns_list = []
+    for col in columns_order:
+      columns_list.append(DataTable._EscapeValue(col_dict[col]["label"]))
+    columns_line = ", ".join(columns_list)
+
+    rows_list = []
+    # We now go over the data and add each row
+    for row in self._PreparedData(order_by):
+      cells_list = []
+      # We add all the elements of this row by their order
+      for col in columns_order:
+        value = "''"
+        if col in row and row[col] is not None:
+          value = self.SingleValueToJS(row[col], col_dict[col]["type"])
+        if isinstance(value, tuple):
+          # We have a formatted value. Using it only for date/time types.
+          if col_dict[col]["type"] in ["date", "datetime", "timeofday"]:
+            cells_list.append(value[1])
+          else:
+            cells_list.append(value[0])
+        else:
+          # We need to quote date types, because they contain commas.
+          if (col_dict[col]["type"] in ["date", "datetime", "timeofday"] and
+              value != "''"):
+            value = "'%s'" % value
+          cells_list.append(value)
+      rows_list.append(", ".join(cells_list))
+    rows = "\n".join(rows_list)
+
+    return "%s\n%s" % (columns_line, rows)
+
   def ToJSon(self, columns_order=None, order_by=()):
     """Writes a JSON string that can be used in a JS DataTable constructor.
 
@@ -620,13 +741,10 @@ class DataTable(object):
       columns_order: Optional. Specifies the order of columns in the
                      output table. Specify a list of all column IDs in the order
                      in which you want the table created.
-      order_by: Optional. Specifies the name of the column(s) to sort by, and
-                (optionally) which direction to sort in. Default sort direction
-                is asc. Following formats are accepted:
-                "string_col_name"  -- For a single key in default (asc) order.
-                ("string_col_name", "asc|desc") -- For a single key.
-                [("col_1","asc|desc"), ("col_2","asc|desc")] -- For more than
-                    one column, an array of tuples of (col_name, "asc|desc").
+                     Note that you must list all column IDs in this parameter,
+                     if you use it.
+      order_by: Optional. Specifies the name of the column(s) to sort by.
+                Passed as is to _PreparedData().
 
     Returns:
       A JSon constructor string to generate a JS DataTable with the data
@@ -640,7 +758,7 @@ class DataTable(object):
     Raises:
       DataTableException: The data does not match the type.
     """
-    if not columns_order:
+    if columns_order is None:
       columns_order = [col["id"] for col in self.__columns]
     col_dict = dict([(col["id"], col) for col in self.__columns])
 
