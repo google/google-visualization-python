@@ -35,5 +35,5 @@ print
 print data_table.ToJSonResponse(columns_order=("name", "salary", "full_time"),
                                 order_by="salary")
 
-# Put the url (http://google-visualization.appspot.com/python/dynamic_example) as your
-# Google Visualization data source.
+# Put the url (http://google-visualization.appspot.com/python/dynamic_example)
+# as your Google Visualization data source.
