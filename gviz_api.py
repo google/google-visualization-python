@@ -820,3 +820,49 @@ class DataTable(object):
     table = self.ToJSon(columns_order, order_by)
     return ("%s({'version':'0.5', 'reqId':'%s', 'status':'OK', "
             "'table': %s});") % (response_handler, req_id, table)
+
+  def ToResponse(self, columns_order=None, order_by=(), tqx=""):
+    """Writes the right response according to the request string passed in tqx.
+
+    This method parses the tqx request string (format of which is defined in
+    the documentation for implementing a data source of Google Visualization),
+    and returns the right response according to the request.
+    It parses out the "out" parameter of tqx, calls the relevant response
+    (ToJSonResponse() for "json", ToCsv() for "csv" and ToHtml() for "html")
+    and passes the response function the rest of the relevant request keys.
+
+    Args:
+      columns_order: Optional. Passed as is to the relevant response function.
+      order_by: Optional. Passed as is to the relevant response function.
+      tqx: Optional. The request string as received by HTTP GET. Should be in
+           the format "key1:value1;key2:value2...". All keys have a default
+           value, so an empty string will just do the default (which is calling
+           ToJSonResponse() with no extra parameters).
+
+    Returns:
+      A response string, as returned by the relevant response function.
+
+    Raises:
+      DataTableException: One of the parameters passed in tqx is not supported.
+    """
+    tqx_dict = {}
+    if tqx:
+      tqx_dict = dict(opt.split(":") for opt in tqx.split(";"))
+    if tqx_dict.get("version", 0.5) != 0.5:
+      raise DataTableException(
+          "Version (%s) passed by request is not supported."
+          % tqx_dict["version"])
+
+    if tqx_dict.get("out", "json") == "json":
+      response_handler = tqx_dict.get("responseHandler",
+                                      "google.visualization.Query.setResponse")
+      return self.ToJSonResponse(columns_order, order_by,
+                                 req_id=tqx_dict.get("reqId", 0),
+                                 response_handler=response_handler)
+    elif tqx_dict["out"] == "html":
+      return self.ToHtml(columns_order, order_by)
+    elif tqx_dict["out"] == "csv":
+      return self.ToCsv(columns_order, order_by)
+    else:
+      raise DataTableException(
+          "'out' parameter: '%s' is not supported" % tqx_dict["out"])

@@ -430,6 +430,26 @@ class DataTableTest(unittest.TestCase):
     # We want to match against the json_str without the curly brackets.
     self.assertEquals(match[0], json_str[1:-1])
 
+  def testToResponse(self):
+    description = ["col1", "col2", "col3"]
+    data = [("1", "2", "3"), ("a", "b", "c"), ("One", "Two", "Three")]
+    table = DataTable(description, data)
+
+    self.assertEquals(table.ToResponse(), table.ToJSonResponse())
+    self.assertEquals(table.ToResponse(tqx="out:csv"), table.ToCsv())
+    self.assertEquals(table.ToResponse(tqx="out:html"), table.ToHtml())
+    self.assertRaises(DataTableException, table.ToResponse, tqx="version:0.6")
+    self.assertEquals(table.ToResponse(tqx="reqId:4;responseHandler:handle"),
+                      table.ToJSonResponse(req_id=4, response_handler="handle"))
+    self.assertEquals(table.ToResponse(tqx="out:csv;reqId:4"), table.ToCsv())
+    self.assertEquals(table.ToResponse(order_by="col2"),
+                      table.ToJSonResponse(order_by="col2"))
+    self.assertEquals(table.ToResponse(tqx="out:html",
+                                       columns_order=("col3", "col2", "col1")),
+                      table.ToHtml(columns_order=("col3", "col2", "col1")))
+    self.assertRaises(ValueError, table.ToResponse, tqx="SomeWrongTqxFormat")
+    self.assertRaises(DataTableException, table.ToResponse, tqx="out:bad")
+
 
 if __name__ == "__main__":
   unittest.main()
