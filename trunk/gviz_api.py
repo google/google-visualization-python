@@ -431,8 +431,8 @@ class DataTable(object):
       DataTableException: The data structure does not match the description.
     """
     # If the maximal depth is 0, we simply iterate over the data table
-    # lines and insert them using InnerLoadData. Otherwise, we simply
-    # let the InnerLoadData handle all the levels.
+    # lines and insert them using _InnerAppendData. Otherwise, we simply
+    # let the _InnerAppendData handle all the levels.
     if not self.__columns[-1]["depth"]:
       for line in data:
         self._InnerAppendData({}, line, 0)
