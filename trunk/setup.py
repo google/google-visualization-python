@@ -1,6 +1,6 @@
 #!/usr/bin/python
 #
-# Copyright (C) 2008 Google Inc.
+# Copyright (C) 2009 Google Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -44,7 +44,7 @@ class TestCommand(distutils.core.Command):
 
 distutils.core.setup(
     name="gviz_api.py",
-    version="1.1",
+    version="1.6",
     description="Python API for Google Visualization",
     long_description="""
 The Python API for Google Visualization makes it easy to convert python data

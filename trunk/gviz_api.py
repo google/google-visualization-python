@@ -1,6 +1,6 @@
 #!/usr/bin/python
 #
-# Copyright (C) 2008 Google Inc.
+# Copyright (C) 2009 Google Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -37,7 +37,6 @@ class DataTableException(Exception):
 
 
 class DataTable(object):
-
   """Wraps the data to convert to a Google Visualization API DataTable.
 
   Create this object, populate it with data, then call one of the ToJS...
@@ -59,8 +58,9 @@ class DataTable(object):
 
   The table schema is defined in the class constructor's table_description
   parameter. The user defines each column using a tuple of
-  (id[, type, [label]]). The default value for type is string, and label
-  is the same as ID if not specified.
+  (id[, type[, label[, custom_properties]]]). The default value for type is
+  string, label is the same as ID if not specified, and custom properties is
+  an empty dictionary if not specified.
 
   table_description is a dictionary or list, containing one or more column
   descriptor tuples, nested dictionaries, and lists. Each dictionary key, list
@@ -107,7 +107,7 @@ class DataTable(object):
     3  4  w
   """
 
-  def __init__(self, table_description, data=None):
+  def __init__(self, table_description, data=None, custom_properties=None):
     """Initialize the data table from a table schema and (optionally) data.
 
     See the class documentation for more information on table schema and data
@@ -122,6 +122,9 @@ class DataTable(object):
             structure must be consistent with schema in table_description. See
             the class documentation for more information on acceptable data. You
             can add data later by calling AppendData().
+      custom_properties: Optional. A dictionary from string to string that
+                         goes into the table's custom properties. This can be
+                         later changed by changing self.custom_properties.
 
     Raises:
       DataTableException: Raised if the data and the description did not match,
@@ -129,8 +132,26 @@ class DataTable(object):
     """
     self.__columns = self.TableDescriptionParser(table_description)
     self.__data = []
+    self.custom_properties = {}
+    if custom_properties is not None:
+      self.custom_properties = custom_properties
     if data:
       self.LoadData(data)
+
+  @staticmethod
+  def _EscapeValueForCsv(v):
+    """Escapes the value for use in a CSV file.
+
+    Puts the string in double-quotes, and escapes any inner double-quotes by
+    doubling them.
+
+    Args:
+      v: The value to escape.
+
+    Returns:
+      The escaped values.
+    """
+    return '"%s"' % v.replace('"', '""')
 
   @staticmethod
   def _EscapeValue(v):
@@ -148,7 +169,16 @@ class DataTable(object):
     return repr(str(v))
 
   @staticmethod
-  def SingleValueToJS(value, value_type):
+  def _EscapeCustomProperties(custom_properties):
+    """Escapes the custom properties dictionary."""
+    l = []
+    for key, value in custom_properties.iteritems():
+      l.append("%s:%s" % (DataTable._EscapeValue(key),
+                          DataTable._EscapeValue(value)))
+    return "{%s}" % ",".join(l)
+
+  @staticmethod
+  def SingleValueToJS(value, value_type, escape_func=None):
     """Translates a single value and type into a JS value.
 
     Internal helper method.
@@ -157,37 +187,52 @@ class DataTable(object):
       value: The value which should be converted
       value_type: One of "string", "number", "boolean", "date", "datetime" or
                   "timeofday".
+      escape_func: The function to use for escaping strings.
 
     Returns:
       The proper JS format (as string) of the given value according to the
       given value_type. For None, we simply return "null".
-      If a tuple is given, it should be of the form (value, formatted value)
-      where the formatted value is a string. In such a case, we return
-      the tuple of (JS value as string, formatted value).
+      If a tuple is given, it should be in one of the following forms:
+        - (value, formatted value)
+        - (value, formatted value, custom properties)
+      where the formatted value is a string, and custom properties is a
+      dictionary of the custom properties for this cell.
+      To specify custom properties without specifying formatted value, one can
+      pass None as the formatted value.
+      One can also have a null-valued cell with formatted value and/or custom
+      properties by specifying None for the value.
+      This method ignores the custom properties except for checking that it is a
+      dictionary. The custom properties are handled in the ToJSon and ToJSCode
+      methods.
       The real type of the given value is not strictly checked. For example,
       any type can be used for string - as we simply take its str( ) and for
       boolean value we just check "if value".
       Examples:
+        SingleValueToJS(None, "boolean") returns "null"
         SingleValueToJS(False, "boolean") returns "false"
         SingleValueToJS((5, "5$"), "number") returns ("5", "'5$'")
+        SingleValueToJS((None, "5$"), "number") returns ("null", "'5$'")
 
     Raises:
       DataTableException: The value and type did not match in a not-recoverable
                           way, for example given value 'abc' for type 'number'.
     """
+    if escape_func is None:
+      escape_func = DataTable._EscapeValue
     if isinstance(value, tuple):
       # In case of a tuple, we run the same function on the value itself and
       # add the formatted value.
-      if len(value) != 2:
+      if (len(value) not in [2, 3] or
+          (len(value) == 3 and not isinstance(value[2], dict))):
         raise DataTableException("Wrong format for value and formatting - %s." %
                                  str(value))
-      if not isinstance(value[1], types.StringTypes):
+      if not isinstance(value[1], types.StringTypes + (types.NoneType,)):
         raise DataTableException("Formatted value is not string, given %s." %
                                  type(value[1]))
       js_value = DataTable.SingleValueToJS(value[0], value_type)
-      if js_value == "null":
-        raise DataTableException("An empty cell can not have formatting.")
-      return (js_value, DataTable._EscapeValue(value[1]))
+      if value[1] is None:
+        return (js_value, None)
+      return (js_value, escape_func(value[1]))
 
     # The standard case - no formatting.
     t_value = type(value)
@@ -206,7 +251,7 @@ class DataTable(object):
     elif value_type == "string":
       if isinstance(value, tuple):
         raise DataTableException("Tuple is not allowed as string value.")
-      return DataTable._EscapeValue(value)
+      return escape_func(value)
 
     elif value_type == "date":
       if not isinstance(value, (datetime.date, datetime.datetime)):
@@ -243,10 +288,14 @@ class DataTable(object):
        ('id',)
        ('id', 'type')
        ('id', 'type', 'label')
+       ('id', 'type', 'label', {'custom_prop1': 'custom_val1'})
     Returns:
-      Dictionary with the following keys: id, label and type where:
+      Dictionary with the following keys: id, label, type, and
+      custom_properties where:
         - If label not given, it equals the id.
         - If type not given, string is used by default.
+        - If custom properties are not given, an empty dictionary is used by
+          default.
 
     Raises:
       DataTableException: The column description did not match the RE.
@@ -263,20 +312,27 @@ class DataTable(object):
 
     # According to the tuple's length, we fill the keys
     # We verify everything is of type string
-    for elem in description:
+    for elem in description[:3]:
       if not isinstance(elem, types.StringTypes):
-        raise DataTableException(("Description error: expected tuple of "
-                                  "strings, current element of type %s." %
-                                  type(elem)))
+        raise DataTableException("Description error: expected tuple of "
+                                 "strings, current element of type %s." %
+                                 type(elem))
     desc_dict = {"id": description[0],
                  "label": description[0],
-                 "type": "string"}
+                 "type": "string",
+                 "custom_properties": {}}
     if len(description) > 1:
       desc_dict["type"] = description[1].lower()
       if len(description) > 2:
         desc_dict["label"] = description[2]
         if len(description) > 3:
-          raise DataTableException("Description error: tuple of length > 3")
+          if not isinstance(description[3], dict):
+            raise DataTableException("Description error: expected custom "
+                                     "properties of type dict, current element "
+                                     "of type %s." % type(description[3]))
+          desc_dict["custom_properties"] = description[3]
+          if len(description) > 4:
+            raise DataTableException("Description error: tuple of length > 4")
     return desc_dict
 
   @staticmethod
@@ -295,12 +351,13 @@ class DataTable(object):
     Returns:
       List of columns, where each column represented by a dictionary with the
       keys: id, label, type, depth, container which means the following:
-      - id: the id of he column
+      - id: the id of the column
       - name: The name of the column
       - type: The datatype of the elements in this column. Allowed types are
               described in ColumnTypeParser().
       - depth: The depth of this column in the table description
       - container: 'dict', 'iter' or 'scalar' for parsing the format easily.
+      - custom_properties: The custom properties for this column.
       The returned description is flattened regardless of how it was given.
 
     Raises:
@@ -313,40 +370,44 @@ class DataTable(object):
        ('id',)
        ('id', 'type')
        ('id', 'type', 'label')
+       ('id', 'type', 'label', {'custom_prop1': 'custom_val1'})
        or as a dictionary:
        'id': 'type'
        'id': ('type',)
        'id': ('type', 'label')
+       'id': ('type', 'label', {'custom_prop1': 'custom_val1'})
       If the type is not specified, we treat it as string.
       If no specific label is given, the label is simply the id.
+      If no custom properties are given, we use an empty dictionary.
 
-      input: [('a', 'date'), ('b', 'timeofday')]
+      input: [('a', 'date'), ('b', 'timeofday', 'b', {'foo': 'bar'})]
       output: [{'id': 'a', 'label': 'a', 'type': 'date',
-                'depth': 0, 'container': 'iter'},
+                'depth': 0, 'container': 'iter', 'custom_properties': {}},
                {'id': 'b', 'label': 'b', 'type': 'timeofday',
-               'depth': 0, 'container': 'iter'}]
+                'depth': 0, 'container': 'iter',
+                'custom_properties': {'foo': 'bar'}}]
 
       input: {'a': [('b', 'number'), ('c', 'string', 'column c')]}
       output: [{'id': 'a', 'label': 'a', 'type': 'string',
-                'depth': 0, 'container': 'dict'},
+                'depth': 0, 'container': 'dict', 'custom_properties': {}},
                {'id': 'b', 'label': 'b', 'type': 'number',
-                'depth': 1, 'container': 'iter'},
+                'depth': 1, 'container': 'iter', 'custom_properties': {}},
                {'id': 'c', 'label': 'column c', 'type': 'string',
-                'depth': 1, 'container': 'iter'}]
+                'depth': 1, 'container': 'iter', 'custom_properties': {}}]
 
       input:  {('a', 'number', 'column a'): { 'b': 'number', 'c': 'string'}}
       output: [{'id': 'a', 'label': 'column a', 'type': 'number',
-                'depth': 0, 'container': 'dict'},
+                'depth': 0, 'container': 'dict', 'custom_properties': {}},
                {'id': 'b', 'label': 'b', 'type': 'number',
-                'depth': 1, 'container': 'dict'},
+                'depth': 1, 'container': 'dict', 'custom_properties': {}},
                {'id': 'c', 'label': 'c', 'type': 'string',
-                'depth': 1, 'container': 'dict'}]
+                'depth': 1, 'container': 'dict', 'custom_properties': {}}]
 
       input: { ('w', 'string', 'word'): ('c', 'number', 'count') }
       output: [{'id': 'w', 'label': 'word', 'type': 'string',
-                'depth': 0, 'container': 'dict'},
+                'depth': 0, 'container': 'dict', 'custom_properties': {}},
                {'id': 'c', 'label': 'count', 'type': 'number',
-                'depth': 1, 'container': 'scalar'}]
+                'depth': 1, 'container': 'scalar', 'custom_properties': {}}]
     """
     # For the recursion step, we check for a scalar object (string or tuple)
     if isinstance(table_description, (types.StringTypes, tuple)):
@@ -410,12 +471,38 @@ class DataTable(object):
     """Returns the number of rows in the current data stored in the table."""
     return len(self.__data)
 
-  def LoadData(self, data):
-    """Loads new data to the data table, clearing existing data."""
-    self.__data = []
-    self.AppendData(data)
+  def SetRowsCustomProperties(self, rows, custom_properties):
+    """Sets the custom properties for given row(s).
 
-  def AppendData(self, data):
+    Can accept a single row or an iterable of rows.
+    Sets the given custom properties for all specified rows.
+
+    Args:
+      rows: The row, or rows, to set the custom properties for.
+      custom_properties: A string to string dictionary of custom properties to
+      set for all rows.
+    """
+    if not hasattr(rows, "__iter__"):
+      rows = [rows]
+    for row in rows:
+      self.__data[row] = (self.__data[row][0], custom_properties)
+
+  def LoadData(self, data, custom_properties=None):
+    """Loads new rows to the data table, clearing existing rows.
+
+    May also set the custom_properties for the added rows. The given custom
+    properties dictionary specifies the dictionary that will be used for *all*
+    given rows.
+
+    Args:
+      data: The rows that the table will contain.
+      custom_properties: A dictionary of string to string to set as the custom
+                         properties for all rows.
+    """
+    self.__data = []
+    self.AppendData(data, custom_properties)
+
+  def AppendData(self, data, custom_properties=None):
     """Appends new data to the table.
 
     Data is appended in rows. Data must comply with
@@ -426,6 +513,8 @@ class DataTable(object):
     Args:
       data: The row to add to the table. The data must conform to the table
             description format.
+      custom_properties: A dictionary of string to string, representing the
+                         custom properties to add to all the rows.
 
     Raises:
       DataTableException: The data structure does not match the description.
@@ -434,10 +523,10 @@ class DataTable(object):
     # lines and insert them using _InnerAppendData. Otherwise, we simply
     # let the _InnerAppendData handle all the levels.
     if not self.__columns[-1]["depth"]:
-      for line in data:
-        self._InnerAppendData({}, line, 0)
+      for row in data:
+        self._InnerAppendData(({}, custom_properties), row, 0)
     else:
-      self._InnerAppendData({}, data, 0)
+      self._InnerAppendData(({}, custom_properties), data, 0)
 
   def _InnerAppendData(self, prev_col_values, data, col_index):
     """Inner function to assist LoadData."""
@@ -447,7 +536,7 @@ class DataTable(object):
 
     # Dealing with the scalar case, the data is the last value.
     if self.__columns[col_index]["container"] == "scalar":
-      prev_col_values[self.__columns[col_index]["id"]] = data
+      prev_col_values[0][self.__columns[col_index]["id"]] = data
       self.__data.append(prev_col_values)
       return
 
@@ -460,7 +549,7 @@ class DataTable(object):
       for value in data:
         if col_index >= len(self.__columns):
           raise DataTableException("Too many elements given in data")
-        prev_col_values[self.__columns[col_index]["id"]] = value
+        prev_col_values[0][self.__columns[col_index]["id"]] = value
         col_index += 1
       self.__data.append(prev_col_values)
       return
@@ -474,7 +563,7 @@ class DataTable(object):
       # We need to add the keys in the dictionary as they are
       for col in self.__columns[col_index:]:
         if col["id"] in data:
-          prev_col_values[col["id"]] = data[col["id"]]
+          prev_col_values[0][col["id"]] = data[col["id"]]
       self.__data.append(prev_col_values)
       return
 
@@ -485,9 +574,10 @@ class DataTable(object):
       self.__data.append(prev_col_values)
     else:
       for key in sorted(data):
-        col_values = dict(prev_col_values)
+        col_values = dict(prev_col_values[0])
         col_values[self.__columns[col_index]["id"]] = key
-        self._InnerAppendData(col_values, data[key], col_index + 1)
+        self._InnerAppendData((col_values, prev_col_values[1]),
+                              data[key], col_index + 1)
 
   def _PreparedData(self, order_by=()):
     """Prepares the data for enumeration - sorting it by order_by.
@@ -528,7 +618,7 @@ class DataTable(object):
     def SortCmpFunc(row1, row2):
       """cmp function for sorted. Compares by keys and 'asc'/'desc' keywords."""
       for key, asc_mult in proper_sort_keys:
-        cmp_result = asc_mult * cmp(row1.get(key), row2.get(key))
+        cmp_result = asc_mult * cmp(row1[0].get(key), row2[0].get(key))
         if cmp_result:
           return cmp_result
       return 0
@@ -563,7 +653,7 @@ class DataTable(object):
          tab1.addColumn('boolean', 'c', 'c');
          tab1.addRows(10);
          tab1.setCell(0, 0, 'a');
-         tab1.setCell(0, 1, 1);
+         tab1.setCell(0, 1, 1, null, {'foo': 'bar'});
          tab1.setCell(0, 2, true);
          ...
          tab1.setCell(9, 0, 'c');
@@ -579,28 +669,43 @@ class DataTable(object):
 
     # We first create the table with the given name
     jscode = "var %s = new google.visualization.DataTable();\n" % name
+    if self.custom_properties:
+      jscode += "%s.setTableProperties(%s);\n" % (
+          name, DataTable._EscapeCustomProperties(self.custom_properties))
 
     # We add the columns to the table
-    for col in columns_order:
+    for i, col in enumerate(columns_order):
       jscode += "%s.addColumn('%s', '%s', '%s');\n" % (name,
                                                        col_dict[col]["type"],
                                                        col_dict[col]["label"],
                                                        col_dict[col]["id"])
+      if col_dict[col]["custom_properties"]:
+        jscode += "%s.setColumnProperties(%d, %s);\n" % (
+            name, i, DataTable._EscapeCustomProperties(
+                col_dict[col]["custom_properties"]))
     jscode += "%s.addRows(%d);\n" % (name, len(self.__data))
 
     # We now go over the data and add each row
-    for (i, row) in enumerate(self._PreparedData(order_by)):
+    for (i, (row, cp)) in enumerate(self._PreparedData(order_by)):
       # We add all the elements of this row by their order
       for (j, col) in enumerate(columns_order):
         if col not in row or row[col] is None:
           continue
+        cell_cp = ""
+        if isinstance(row[col], tuple) and len(row[col]) == 3:
+          cell_cp = ", %s" % DataTable._EscapeCustomProperties(row[col][2])
         value = self.SingleValueToJS(row[col], col_dict[col]["type"])
         if isinstance(value, tuple):
-          # We have a formatted value as well
-          jscode += ("%s.setCell(%d, %d, %s, %s);\n" %
-                     (name, i, j, value[0], value[1]))
+          # We have a formatted value or custom property as well
+          if value[1] is None:
+            value = (value[0], "null")
+          jscode += ("%s.setCell(%d, %d, %s, %s%s);\n" %
+                     (name, i, j, value[0], value[1], cell_cp))
         else:
           jscode += "%s.setCell(%d, %d, %s);\n" % (name, i, j, value)
+      if cp:
+        jscode += "%s.setRowProperties(%d, %s);\n" % (
+            name, i, DataTable._EscapeCustomProperties(cp))
     return jscode
 
   def ToHtml(self, columns_order=None, order_by=()):
@@ -647,7 +752,7 @@ class DataTable(object):
 
     rows_list = []
     # We now go over the data and add each row
-    for row in self._PreparedData(order_by):
+    for row, unused_cp in self._PreparedData(order_by):
       cells_list = []
       # We add all the elements of this row by their order
       for col in columns_order:
@@ -665,7 +770,7 @@ class DataTable(object):
 
     return table_template % (columns_html + rows_html)
 
-  def ToCsv(self, columns_order=None, order_by=()):
+  def ToCsv(self, columns_order=None, order_by=(), separator=", "):
     """Writes the data table as a CSV string.
 
     Args:
@@ -676,6 +781,7 @@ class DataTable(object):
                      if you use it.
       order_by: Optional. Specifies the name of the column(s) to sort by.
                 Passed as is to _PreparedData.
+      separator: Optional. The separator to use between the values.
 
     Returns:
       A CSV string representing the table.
@@ -693,18 +799,19 @@ class DataTable(object):
 
     columns_list = []
     for col in columns_order:
-      columns_list.append(DataTable._EscapeValue(col_dict[col]["label"]))
-    columns_line = ", ".join(columns_list)
+      columns_list.append(DataTable._EscapeValueForCsv(col_dict[col]["label"]))
+    columns_line = separator.join(columns_list)
 
     rows_list = []
     # We now go over the data and add each row
-    for row in self._PreparedData(order_by):
+    for row, unused_cp in self._PreparedData(order_by):
       cells_list = []
       # We add all the elements of this row by their order
       for col in columns_order:
-        value = "''"
+        value = '""'
         if col in row and row[col] is not None:
-          value = self.SingleValueToJS(row[col], col_dict[col]["type"])
+          value = self.SingleValueToJS(row[col], col_dict[col]["type"],
+                                       DataTable._EscapeValueForCsv)
         if isinstance(value, tuple):
           # We have a formatted value. Using it only for date/time types.
           if col_dict[col]["type"] in ["date", "datetime", "timeofday"]:
@@ -714,13 +821,29 @@ class DataTable(object):
         else:
           # We need to quote date types, because they contain commas.
           if (col_dict[col]["type"] in ["date", "datetime", "timeofday"] and
-              value != "''"):
-            value = "'%s'" % value
+              value != '""'):
+            value = '"%s"' % value
           cells_list.append(value)
-      rows_list.append(", ".join(cells_list))
+      rows_list.append(separator.join(cells_list))
     rows = "\n".join(rows_list)
 
     return "%s\n%s" % (columns_line, rows)
+
+  def ToTsvExcel(self, columns_order=None, order_by=()):
+    """Returns a file in tab-separated-format readable by MS Excel.
+
+    Returns a file in UTF-16 little endian encoding, with tabs separating the
+    values.
+
+    Args:
+      columns_order: Delegated to ToCsv.
+      order_by: Delegated to ToCsv.
+
+    Returns:
+      A tab-separated little endian UTF16 file representing the table.
+    """
+    return self.ToCsv(
+        columns_order, order_by, separator="\t").encode("UTF-16LE")
 
   def ToJSon(self, columns_order=None, order_by=()):
     """Writes a JSON string that can be used in a JS DataTable constructor.
@@ -733,7 +856,7 @@ class DataTable(object):
       ... on my page that hosts my visualization ...
       google.setOnLoadCallback(drawTable);
       function drawTable() {
-        var data = new google.visualization.DataTable(_my_JSon_string, 0.5);
+        var data = new google.visualization.DataTable(_my_JSon_string, 0.6);
         myTable.draw(data);
       }
 
@@ -753,7 +876,8 @@ class DataTable(object):
        {cols: [{id:'a',label:'a',type:'number'},
                {id:'b',label:'b',type:'string'},
               {id:'c',label:'c',type:'number'}],
-        rows: [{c:[{v:1},{v:'z'},{v:2}]}, c:{[{v:3,f:'3$'},{v:'w'},{v:null}]}]}
+        rows: [{c:[{v:1},{v:'z'},{v:2}]}, c:{[{v:3,f:'3$'},{v:'w'},{v:null}]}],
+        p:    {'foo': 'bar'}}
 
     Raises:
       DataTableException: The data does not match the type.
@@ -763,12 +887,19 @@ class DataTable(object):
     col_dict = dict([(col["id"], col) for col in self.__columns])
 
     # Creating the columns jsons
-    cols_jsons = ["{id:'%(id)s',label:'%(label)s',type:'%(type)s'}" %
-                  col_dict[col_id] for col_id in columns_order]
+    cols_jsons = []
+    for col_id in columns_order:
+      d = dict(col_dict[col_id])
+      d["cp"] = ""
+      if col_dict[col_id]["custom_properties"]:
+        d["cp"] = ",p:%s" % DataTable._EscapeCustomProperties(
+            col_dict[col_id]["custom_properties"])
+      cols_jsons.append(
+          "{id:'%(id)s',label:'%(label)s',type:'%(type)s'%(cp)s}" % d)
 
     # Creating the rows jsons
     rows_jsons = []
-    for row in self._PreparedData(order_by):
+    for row, cp in self._PreparedData(order_by):
       cells_jsons = []
       for col in columns_order:
         # We omit the {v:null} for a None value of the not last column
@@ -778,15 +909,34 @@ class DataTable(object):
         else:
           value = self.SingleValueToJS(value, col_dict[col]["type"])
           if isinstance(value, tuple):
-            # We have a formatted value as well
-            cells_jsons.append("{v:%s,f:%s}" % value)
+            # We have a formatted value or custom property as well
+            if len(row.get(col)) == 3:
+              if value[1] is None:
+                cells_jsons.append("{v:%s,p:%s}" % (
+                    value[0],
+                    DataTable._EscapeCustomProperties(row.get(col)[2])))
+              else:
+                cells_jsons.append("{v:%s,f:%s,p:%s}" % (value + (
+                    DataTable._EscapeCustomProperties(row.get(col)[2]),)))
+            else:
+              cells_jsons.append("{v:%s,f:%s}" % value)
           else:
             cells_jsons.append("{v:%s}" % value)
-      rows_jsons.append("{c:[%s]}" % ",".join(cells_jsons))
+      if cp:
+        rows_jsons.append("{c:[%s],p:%s}" % (
+            ",".join(cells_jsons), DataTable._EscapeCustomProperties(cp)))
+      else:
+        rows_jsons.append("{c:[%s]}" % ",".join(cells_jsons))
+
+    general_custom_properties = ""
+    if self.custom_properties:
+      general_custom_properties = (
+          ",p:%s" % DataTable._EscapeCustomProperties(self.custom_properties))
 
     # We now join the columns jsons and the rows jsons
-    json = "{cols: [%s],rows: [%s]}" % (",".join(cols_jsons),
-                                        ",".join(rows_jsons))
+    json = "{cols:[%s],rows:[%s]%s}" % (",".join(cols_jsons),
+                                        ",".join(rows_jsons),
+                                        general_custom_properties)
     return json
 
   def ToJSonResponse(self, columns_order=None, order_by=(), req_id=0,
@@ -811,14 +961,14 @@ class DataTable(object):
       client side.
       Example result (newlines added for readability):
        google.visualization.Query.setResponse({
-          'version':'0.5', 'reqId':'0', 'status':'OK',
+          'version':'0.6', 'reqId':'0', 'status':'OK',
           'table': {cols: [...], rows: [...]}});
 
     Note: The URL returning this string can be used as a data source by Google
           Visualization Gadgets or from JS code.
     """
     table = self.ToJSon(columns_order, order_by)
-    return ("%s({'version':'0.5', 'reqId':'%s', 'status':'OK', "
+    return ("%s({'version':'0.6', 'reqId':'%s', 'status':'OK', "
             "'table': %s});") % (response_handler, req_id, table)
 
   def ToResponse(self, columns_order=None, order_by=(), tqx=""):
@@ -828,8 +978,9 @@ class DataTable(object):
     the documentation for implementing a data source of Google Visualization),
     and returns the right response according to the request.
     It parses out the "out" parameter of tqx, calls the relevant response
-    (ToJSonResponse() for "json", ToCsv() for "csv" and ToHtml() for "html")
-    and passes the response function the rest of the relevant request keys.
+    (ToJSonResponse() for "json", ToCsv() for "csv", ToHtml() for "html",
+    ToTsvExcel() for "tsv-excel") and passes the response function the rest of
+    the relevant request keys.
 
     Args:
       columns_order: Optional. Passed as is to the relevant response function.
@@ -848,7 +999,7 @@ class DataTable(object):
     tqx_dict = {}
     if tqx:
       tqx_dict = dict(opt.split(":") for opt in tqx.split(";"))
-    if tqx_dict.get("version", 0.5) != 0.5:
+    if tqx_dict.get("version", "0.6") != "0.6":
       raise DataTableException(
           "Version (%s) passed by request is not supported."
           % tqx_dict["version"])
@@ -863,6 +1014,8 @@ class DataTable(object):
       return self.ToHtml(columns_order, order_by)
     elif tqx_dict["out"] == "csv":
       return self.ToCsv(columns_order, order_by)
+    elif tqx_dict["out"] == "tsv-excel":
+      return self.ToTsvExcel(columns_order, order_by)
     else:
       raise DataTableException(
           "'out' parameter: '%s' is not supported" % tqx_dict["out"])
