@@ -44,7 +44,7 @@ class TestCommand(distutils.core.Command):
 
 distutils.core.setup(
     name="gviz_api.py",
-    version="1.6",
+    version="1.6.1",
     description="Python API for Google Visualization",
     long_description="""
 The Python API for Google Visualization makes it easy to convert python data
