@@ -675,10 +675,11 @@ class DataTable(object):
 
     # We add the columns to the table
     for i, col in enumerate(columns_order):
-      jscode += "%s.addColumn('%s', '%s', '%s');\n" % (name,
-                                                       col_dict[col]["type"],
-                                                       col_dict[col]["label"],
-                                                       col_dict[col]["id"])
+      jscode += "%s.addColumn('%s', %s, %s);\n" % (
+          name,
+          col_dict[col]["type"],
+          DataTable._EscapeValue(col_dict[col]["label"]),
+          DataTable._EscapeValue(col_dict[col]["id"]))
       if col_dict[col]["custom_properties"]:
         jscode += "%s.setColumnProperties(%d, %s);\n" % (
             name, i, DataTable._EscapeCustomProperties(
@@ -747,7 +748,8 @@ class DataTable(object):
 
     columns_list = []
     for col in columns_order:
-      columns_list.append(header_cell_template % col_dict[col]["label"])
+      columns_list.append(header_cell_template %
+                          cgi.escape(col_dict[col]["label"]))
     columns_html = columns_template % "".join(columns_list)
 
     rows_list = []
@@ -890,12 +892,14 @@ class DataTable(object):
     cols_jsons = []
     for col_id in columns_order:
       d = dict(col_dict[col_id])
+      d["id"] = DataTable._EscapeValue(d["id"])
+      d["label"] = DataTable._EscapeValue(d["label"])
       d["cp"] = ""
       if col_dict[col_id]["custom_properties"]:
         d["cp"] = ",p:%s" % DataTable._EscapeCustomProperties(
             col_dict[col_id]["custom_properties"])
       cols_jsons.append(
-          "{id:'%(id)s',label:'%(label)s',type:'%(type)s'%(cp)s}" % d)
+          "{id:%(id)s,label:%(label)s,type:'%(type)s'%(cp)s}" % d)
 
     # Creating the rows jsons
     rows_jsons = []
