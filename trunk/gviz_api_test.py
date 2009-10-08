@@ -118,9 +118,11 @@ class DataTableTest(unittest.TestCase):
     self.assertRaises(DataTableException,
                       DataTable.ColumnTypeParser, 5)
     self.assertRaises(DataTableException,
-                      DataTable.ColumnTypeParser, ("a", "b", "c", "d"))
-    self.assertRaises(DataTableException,
                       DataTable.ColumnTypeParser, ("a", 5, "c"))
+    self.assertRaises(DataTableException,
+                      DataTable.ColumnTypeParser, ("a", "blah"))
+    self.assertRaises(DataTableException,
+                      DataTable.ColumnTypeParser, ("a", "number", "c", "d"))
 
     # Checking several legal formats
     self.assertEqual({"id": "abc", "label": "abc", "type": "string",
@@ -179,6 +181,14 @@ class DataTableTest(unittest.TestCase):
                                                 ("c", "string", "column c")]}))
 
     self.assertEqual(
+      [{"id": "a", "label": "column a", "type": "number", "depth": 0,
+        "container": "dict", "custom_properties": {}},
+       {"id": "b", "label": "column b", "type": "string", "depth": 0,
+        "container": "dict", "custom_properties": {}}],
+       DataTable.TableDescriptionParser({'a': ('number', 'column a'),
+                                         'b': ('string', 'column b')}))
+
+    self.assertEqual(
         [{"id": "a", "label": "column a", "type": "number",
           "depth": 0, "container": "dict", "custom_properties": {}},
          {"id": "b", "label": "b", "type": "number",
@@ -195,6 +205,28 @@ class DataTableTest(unittest.TestCase):
           "depth": 1, "container": "scalar", "custom_properties": {}}],
         DataTable.TableDescriptionParser({("a", "number", "column a"):
                                           ("b", "string", "column b")}))
+
+    # Cases that might create ambiguity
+    self.assertEqual(
+      [{"id": "a", "label": "column a", "type": "number", "depth": 0,
+        "container": "dict", "custom_properties": {}}],
+       DataTable.TableDescriptionParser({'a': ('number', 'column a')}))
+    self.assertRaises(DataTableException, DataTable.TableDescriptionParser,
+                      {'a': ('b', 'number')})
+
+    self.assertEqual(
+      [{"id": "a", "label": "a", "type": "string", "depth": 0,
+        "container": "dict", "custom_properties": {}},
+       {"id": "b", "label": "b", "type": "number", "depth": 1,
+        "container": "scalar", "custom_properties": {}}],
+       DataTable.TableDescriptionParser({'a': ('b', 'number', 'b', {})}))
+
+    self.assertEqual(
+      [{"id": "a", "label": "a", "type": "string", "depth": 0,
+        "container": "dict", "custom_properties": {}},
+       {"id": "b", "label": "b", "type": "number", "depth": 1,
+        "container": "scalar", "custom_properties": {}}],
+       DataTable.TableDescriptionParser({('a',): ('b', 'number')}))
 
   def testAppendData(self):
     # We check a few examples where the format of the data does not match the
@@ -322,7 +354,7 @@ class DataTableTest(unittest.TestCase):
             "{id:'b',label:\"bb'\",type:'number'}],"
             "rows:[{c:[{v:'a1'},{v:1}]},{c:[{v:'a2'},{v:2}]},"
             "{c:[{v:'a3'},{v:3}]}]}")
-    table = DataTable({"a'": ("b", "number", "bb'")},
+    table = DataTable({"a'": ("b", "number", "bb'", {})},
                       {"a1": 1, "a2": 2, "a3": 3})
     self.assertEqual(3, table.NumberOfRows())
     self.assertEqual(json,
