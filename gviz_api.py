@@ -298,7 +298,8 @@ class DataTable(object):
           default.
 
     Raises:
-      DataTableException: The column description did not match the RE.
+      DataTableException: The column description did not match the RE, or
+          unsupported type was passed.
     """
     if not description:
       raise DataTableException("Description error: empty description given")
@@ -333,6 +334,10 @@ class DataTable(object):
           desc_dict["custom_properties"] = description[3]
           if len(description) > 4:
             raise DataTableException("Description error: tuple of length > 4")
+    if desc_dict["type"] not in ["string", "number", "boolean",
+                                 "date", "datetime", "timeofday"]:
+      raise DataTableException(
+          "Description error: unsupported type '%s'" % desc_dict["type"])
     return desc_dict
 
   @staticmethod
@@ -408,6 +413,22 @@ class DataTable(object):
                 'depth': 0, 'container': 'dict', 'custom_properties': {}},
                {'id': 'c', 'label': 'count', 'type': 'number',
                 'depth': 1, 'container': 'scalar', 'custom_properties': {}}]
+
+      input: {'a': ('number', 'column a'), 'b': ('string', 'column b')}
+      output: [{'id': 'a', 'label': 'column a', 'type': 'number', 'depth': 0,
+               'container': 'dict', 'custom_properties': {}},
+               {'id': 'b', 'label': 'column b', 'type': 'string', 'depth': 0,
+               'container': 'dict', 'custom_properties': {}}
+
+      NOTE: there might be ambiguity in the case of a dictionary representation
+      of a single column. For example, the following description can be parsed
+      in 2 different ways: {'a': ('b', 'c')} can be thought of a single column
+      with the id 'a', of type 'b' and the label 'c', or as 2 columns: one named
+      'a', and the other named 'b' of type 'c'. We choose the first option by
+      default, and in case the second option is the right one, it is possible to
+      make the key into a tuple (i.e. {('a',): ('b', 'c')}) or add more info
+      into the tuple, thus making it look like this: {'a': ('b', 'c', 'b', {})}
+      -- second 'b' is the label, and {} is the custom properties field.
     """
     # For the recursion step, we check for a scalar object (string or tuple)
     if isinstance(table_description, (types.StringTypes, tuple)):
@@ -437,9 +458,17 @@ class DataTable(object):
       raise DataTableException("Empty dictionaries are not allowed inside"
                                " description")
 
-    # The number of keys in the dictionary separates between the two cases of
-    # more levels below or this is the most inner dictionary.
-    if len(table_description) != 1:
+    # To differentiate between the two cases of more levels below or this is
+    # the most inner dictionary, we consider the number of keys (more then one
+    # key is indication for most inner dictionary) and the type of the key and
+    # value in case of only 1 key (if the type of key is string and the type of
+    # the value is a tuple of 0-3 items, we assume this is the most inner
+    # dictionary).
+    # NOTE: this way of differentiating might create ambiguity. See docs.
+    if (len(table_description) != 1 or
+        (isinstance(table_description.keys()[0], types.StringTypes) and
+         isinstance(table_description.values()[0], tuple) and
+         len(table_description.values()[0]) < 4)):
       # This is the most inner dictionary. Parsing types.
       columns = []
       # We sort the items, equivalent to sort the keys since they are unique
