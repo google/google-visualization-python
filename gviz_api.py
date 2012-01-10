@@ -31,6 +31,25 @@ import datetime
 import types
 
 
+# Dictionary from characters that need to be escaped in JSON to their escaped
+# versions.
+ESCAPE_FOR_JSON = {
+    u'\\': u'\\\\',
+    u'\'': u'\\\'',
+    u'"': u'\\"',
+    u'\b': u'\\b',
+    u'\f': u'\\f',
+    u'\n': u'\\n',
+    u'\r': u'\\r',
+    u'\t': u'\\t',
+}
+
+# The character we use for quoting JSON strings (double-quote is the JSON
+# standard but Python's repr() by default uses single quotes, which is what this
+# library used to use.)
+JSON_QUOTE_CHAR = '"'
+
+
 class DataTableException(Exception):
   """The general exception object thrown by DataTable."""
   pass
@@ -155,18 +174,29 @@ class DataTable(object):
 
   @staticmethod
   def _EscapeValue(v):
-    """Puts the string in quotes, and escapes any inner quotes and slashes."""
+    """Turn a string into one that is acceptable by JavaScript.
+
+    This encoding is almost JSON spec compliant, except that we use single
+    rather than double quotes for legacy reasons (also note that the API's
+    "json" output is not actually valid JSON in other ways). We convert all
+    strings to Unicode, put them in quotes, and escape various characters such
+    as inner quotes and slashes.
+
+    Args:
+      v: The value to escape.
+
+    Returns:
+      The escaped value, as a Unicode string.
+    """
+
     if isinstance(v, unicode):
-      # Here we use repr as in the usual case, but on unicode strings, it
-      # also escapes the unicode characters (which we want to leave as is).
-      # So, after repr() we decode using raw-unicode-escape, which decodes
-      # only the unicode characters, and leaves all the rest (", ', \n and
-      # more) escaped.
-      # We don't take the first character, because repr adds a u in the
-      # beginning of the string (usual repr output for unicode is u'...').
-      return repr(v).decode("raw-unicode-escape")[1:]
-    # Here we use python built-in escaping mechanism for string using repr.
-    return repr(str(v))
+      v_unicode = v
+    else:
+      v_unicode = str(v).decode('utf-8')
+    return u'%s%s%s' % (
+        JSON_QUOTE_CHAR,
+        u''.join(ESCAPE_FOR_JSON.get(char, char) for char in v_unicode),
+        JSON_QUOTE_CHAR)
 
   @staticmethod
   def _EscapeCustomProperties(custom_properties):
@@ -677,16 +707,16 @@ class DataTable(object):
       name and the data stored in the DataTable object.
       Example result:
         "var tab1 = new google.visualization.DataTable();
-         tab1.addColumn('string', 'a', 'a');
-         tab1.addColumn('number', 'b', 'b');
-         tab1.addColumn('boolean', 'c', 'c');
+         tab1.addColumn("string", "a", "a");
+         tab1.addColumn("number", "b", "b");
+         tab1.addColumn("boolean", "c", "c");
          tab1.addRows(10);
-         tab1.setCell(0, 0, 'a');
-         tab1.setCell(0, 1, 1, null, {'foo': 'bar'});
+         tab1.setCell(0, 0, "a");
+         tab1.setCell(0, 1, 1, null, {"foo": "bar"});
          tab1.setCell(0, 2, true);
          ...
-         tab1.setCell(9, 0, 'c');
-         tab1.setCell(9, 1, 3, '3$');
+         tab1.setCell(9, 0, "c");
+         tab1.setCell(9, 1, 3, "3$");
          tab1.setCell(9, 2, false);"
 
     Raises:
@@ -704,7 +734,7 @@ class DataTable(object):
 
     # We add the columns to the table
     for i, col in enumerate(columns_order):
-      jscode += "%s.addColumn('%s', %s, %s);\n" % (
+      jscode += '%s.addColumn("%s", %s, %s);\n' % (
           name,
           col_dict[col]["type"],
           DataTable._EscapeValue(col_dict[col]["label"]),
@@ -753,7 +783,7 @@ class DataTable(object):
     Returns:
       An HTML table code string.
       Example result (the result is without the newlines):
-       <html><body><table border='1'>
+       <html><body><table border="1">
         <thead><tr><th>a</th><th>b</th><th>c</th></tr></thead>
         <tbody>
          <tr><td>1</td><td>"z"</td><td>2</td></tr>
@@ -764,7 +794,7 @@ class DataTable(object):
     Raises:
       DataTableException: The data does not match the type.
     """
-    table_template = "<html><body><table border='1'>%s</table></body></html>"
+    table_template = "<html><body><table border=\"1\">%s</table></body></html>"
     columns_template = "<thead><tr>%s</tr></thead>"
     rows_template = "<tbody>%s</tbody>"
     row_template = "<tr>%s</tr>"
@@ -904,10 +934,10 @@ class DataTable(object):
       A JSon constructor string to generate a JS DataTable with the data
       stored in the DataTable object.
       Example result (the result is without the newlines):
-       {cols: [{id:'a',label:'a',type:'number'},
-               {id:'b',label:'b',type:'string'},
-              {id:'c',label:'c',type:'number'}],
-        rows: [{c:[{v:1},{v:'z'},{v:2}]}, c:{[{v:3,f:'3$'},{v:'w'},{v:null}]}],
+       {cols: [{id:"a",label:"a",type:"number"},
+               {id:"b",label:"b",type:"string"},
+              {id:"c",label:"c",type:"number"}],
+        rows: [{c:[{v:1},{v:"z"},{v:2}]}, c:{[{v:3,f:"3$"},{v:"w"},{v:null}]}],
         p:    {'foo': 'bar'}}
 
     Raises:
@@ -927,8 +957,9 @@ class DataTable(object):
       if col_dict[col_id]["custom_properties"]:
         d["cp"] = ",p:%s" % DataTable._EscapeCustomProperties(
             col_dict[col_id]["custom_properties"])
+      d["q"] = JSON_QUOTE_CHAR
       cols_jsons.append(
-          "{id:%(id)s,label:%(label)s,type:'%(type)s'%(cp)s}" % d)
+          '{id:%(id)s,label:%(label)s,type:%(q)s%(type)s%(q)s%(cp)s}' % d)
 
     # Creating the rows jsons
     rows_jsons = []
@@ -970,7 +1001,7 @@ class DataTable(object):
     json = "{cols:[%s],rows:[%s]%s}" % (",".join(cols_jsons),
                                         ",".join(rows_jsons),
                                         general_custom_properties)
-    return json
+    return json.encode('utf-8')
 
   def ToJSonResponse(self, columns_order=None, order_by=(), req_id=0,
                      response_handler="google.visualization.Query.setResponse"):
@@ -1001,8 +1032,14 @@ class DataTable(object):
           Visualization Gadgets or from JS code.
     """
     table = self.ToJSon(columns_order, order_by)
-    return ("%s({'version':'0.6', 'reqId':'%s', 'status':'OK', "
-            "'table': %s});") % (response_handler, req_id, table)
+    return ('%(handler)s({%(q)sversion%(q)s:%(q)s0.6%(q)s, '
+            '%(q)sreqId%(q)s:%(q)s%(req_id)s%(q)s, '
+            '%(q)sstatus%(q)s:%(q)sOK%(q)s, '
+            '%(q)stable%(q)s: %(table)s});') % {
+                'handler': response_handler,
+                'req_id': req_id,
+                'table': table,
+                'q': JSON_QUOTE_CHAR}
 
   def ToResponse(self, columns_order=None, order_by=(), tqx=""):
     """Writes the right response according to the request string passed in tqx.

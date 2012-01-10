@@ -52,18 +52,18 @@ class DataTableTest(unittest.TestCase):
     self.assertEqual("false", DataTable.SingleValueToJS(False, "boolean"))
     self.assertEqual("true", DataTable.SingleValueToJS(1, "boolean"))
     self.assertEqual("null", DataTable.SingleValueToJS(None, "boolean"))
-    self.assertEqual(("false", "'a'"),
+    self.assertEqual(("false", u'"a"'),
                      DataTable.SingleValueToJS((False, "a"), "boolean"))
 
     self.assertEqual("1", DataTable.SingleValueToJS(1, "number"))
     self.assertEqual("1.0", DataTable.SingleValueToJS(1., "number"))
     self.assertEqual("-5", DataTable.SingleValueToJS(-5, "number"))
     self.assertEqual("null", DataTable.SingleValueToJS(None, "number"))
-    self.assertEqual(("5", "'5$'"),
+    self.assertEqual(("5", u'"5$"'),
                      DataTable.SingleValueToJS((5, "5$"), "number"))
 
-    self.assertEqual("'-5'", DataTable.SingleValueToJS(-5, "string"))
-    self.assertEqual("'abc'", DataTable.SingleValueToJS("abc", "string"))
+    self.assertEqual('"-5"', DataTable.SingleValueToJS(-5, "string"))
+    self.assertEqual('"abc"', DataTable.SingleValueToJS("abc", "string"))
     self.assertEqual("null", DataTable.SingleValueToJS(None, "string"))
 
     self.assertEqual("new Date(2010,0,2)",
@@ -84,7 +84,7 @@ class DataTableTest(unittest.TestCase):
                      DataTable.SingleValueToJS(datetime(2001, 2, 3, 4, 5, 6),
                                                "datetime"))
     self.assertEqual("null", DataTable.SingleValueToJS(None, "datetime"))
-    self.assertEqual(("null", "'none'"),
+    self.assertEqual(("null", '"none"'),
                      DataTable.SingleValueToJS((None, "none"), "string"))
 
   def testDifferentStrings(self):
@@ -92,16 +92,14 @@ class DataTableTest(unittest.TestCase):
     problematic_strings = ["control", "new\nline", "",
                            "single'quote", 'double"quote',
                            r"one\slash", r"two\\slash", u"unicode eng",
-                           u"unicode \u05e2\u05d1\u05e8\u05d9\u05ea"]
+                           u"unicode \u05e2\u05d1\u05e8\u05d9\u05ea",
+                           u'"\u05e2\u05d1\\\'\u05e8\u05d9\u05ea"',
+                           ]
     for s in problematic_strings:
-      js_value = DataTable.SingleValueToJS(s, "string")
-      if isinstance(js_value, unicode):
-        js_value = "u%s" % js_value
+      js_value = u"u%s" % DataTable.SingleValueToJS(s, "string")
       self.assertEquals(s, eval(js_value))
 
-      js_value = DataTable.SingleValueToJS(("str", s), "string")[1]
-      if isinstance(js_value, unicode):
-        js_value = "u%s" % js_value
+      js_value = u"u%s" % DataTable.SingleValueToJS(("str", s), "string")[1]
       self.assertEquals(s, eval(js_value))
 
   def testDifferentCustomProperties(self):
@@ -273,22 +271,22 @@ class DataTableTest(unittest.TestCase):
     self.assertEqual(3, table.NumberOfRows())
 
   def testToJSCode(self):
-    table = DataTable([("a", "number", "A'"), "b'", ("c", "timeofday")],
+    table = DataTable([("a", "number", "A'"), "b\"", ("c", "timeofday")],
                       [[1],
                        [None, "z", time(1, 2, 3)],
                        [(2, "2$"), "w", time(2, 3, 4)]])
     self.assertEqual(3, table.NumberOfRows())
-    self.assertEqual(("var mytab = new google.visualization.DataTable();\n"
-                      "mytab.addColumn('number', \"A'\", 'a');\n"
-                      "mytab.addColumn('string', \"b'\", \"b'\");\n"
-                      "mytab.addColumn('timeofday', 'c', 'c');\n"
-                      "mytab.addRows(3);\n"
-                      "mytab.setCell(0, 0, 1);\n"
-                      "mytab.setCell(1, 1, 'z');\n"
-                      "mytab.setCell(1, 2, [1,2,3]);\n"
-                      "mytab.setCell(2, 0, 2, '2$');\n"
-                      "mytab.setCell(2, 1, 'w');\n"
-                      "mytab.setCell(2, 2, [2,3,4]);\n"),
+    self.assertEqual((u'var mytab = new google.visualization.DataTable();\n'
+                      u'mytab.addColumn("number", "A\\\'", "a");\n'
+                      u'mytab.addColumn("string", "b\\"", "b\\"");\n'
+                      u'mytab.addColumn("timeofday", "c", "c");\n'
+                      u'mytab.addRows(3);\n'
+                      u'mytab.setCell(0, 0, 1);\n'
+                      u'mytab.setCell(1, 1, "z");\n'
+                      u'mytab.setCell(1, 2, [1,2,3]);\n'
+                      u'mytab.setCell(2, 0, 2, "2$");\n'
+                      u'mytab.setCell(2, 1, "w");\n'
+                      u'mytab.setCell(2, 2, [2,3,4]);\n'),
                      table.ToJSCode("mytab"))
 
     table = DataTable({("a", "number"): {"b": "date", "c": "datetime"}},
@@ -297,42 +295,47 @@ class DataTableTest(unittest.TestCase):
                        3: {"c": datetime(1, 2, 3, 4, 5, 6)}})
     self.assertEqual(3, table.NumberOfRows())
     self.assertEqual(("var mytab2 = new google.visualization.DataTable();\n"
-                      "mytab2.addColumn('datetime', 'c', 'c');\n"
-                      "mytab2.addColumn('date', 'b', 'b');\n"
-                      "mytab2.addColumn('number', 'a', 'a');\n"
-                      "mytab2.addRows(3);\n"
-                      "mytab2.setCell(0, 2, 1);\n"
-                      "mytab2.setCell(1, 1, new Date(1,1,3));\n"
-                      "mytab2.setCell(1, 2, 2);\n"
-                      "mytab2.setCell(2, 0, new Date(1,1,3,4,5,6));\n"
-                      "mytab2.setCell(2, 2, 3);\n"),
+                      'mytab2.addColumn("datetime", "c", "c");\n'
+                      'mytab2.addColumn("date", "b", "b");\n'
+                      'mytab2.addColumn("number", "a", "a");\n'
+                      'mytab2.addRows(3);\n'
+                      'mytab2.setCell(0, 2, 1);\n'
+                      'mytab2.setCell(1, 1, new Date(1,1,3));\n'
+                      'mytab2.setCell(1, 2, 2);\n'
+                      'mytab2.setCell(2, 0, new Date(1,1,3,4,5,6));\n'
+                      'mytab2.setCell(2, 2, 3);\n'),
                      table.ToJSCode("mytab2", columns_order=["c", "b", "a"]))
 
   def testToJSon(self):
     # The json of the initial data we load to the table.
-    init_data_json = ("{cols:"
-                      "[{id:'a',label:'A',type:'number'},"
-                      "{id:'b',label:'b',type:'string'},"
-                      "{id:'c',label:'c',type:'boolean'}],"
-                      "rows:["
-                      "{c:[{v:1},,{v:null}]},"
-                      "{c:[,{v:'z'},{v:true}]}"
-                      "]}")
+    init_data_json = (u'{cols:'
+                      u'[{id:"a",label:"A",type:"number"},'
+                      u'{id:"b",label:"b",type:"string"},'
+                      u'{id:"c",label:"c",type:"boolean"}],'
+                      u'rows:['
+                      u'{c:[{v:1},,{v:null}]},'
+                      u'{c:[,{v:"z"},{v:true}]},'
+                      u'{c:[,{v:"\u05d0"},{v:null}]},'
+                      u'{c:[,{v:"\u05d1"},{v:null}]}'
+                      u']}')
     table = DataTable([("a", "number", "A"), "b", ("c", "boolean")],
                       [[1],
-                       [None, "z", True]])
-    self.assertEqual(2, table.NumberOfRows())
-    self.assertEqual(init_data_json,
+                       [None, "z", True],
+                       [None, u"\u05d0"],
+                       [None, u"\u05d1".encode('utf-8')]])
+    self.assertEqual(4, table.NumberOfRows())
+    self.assertEqual(init_data_json.encode('utf-8'),
                      table.ToJSon())
     table.AppendData([[-1, "w", False]])
-    self.assertEqual(3, table.NumberOfRows())
-    self.assertEqual(init_data_json[:-2] + ",{c:[{v:-1},{v:'w'},{v:false}]}]}",
+    self.assertEqual(5, table.NumberOfRows())
+    self.assertEqual(init_data_json[:-2].encode('utf-8') +
+                     ',{c:[{v:-1},{v:"w"},{v:false}]}]}',
                      table.ToJSon())
 
-    cols_json = ("{cols:"
-                 "[{id:'t',label:'T',type:'timeofday'},"
-                 "{id:'d',label:'d',type:'date'},"
-                 "{id:'dt',label:'dt',type:'datetime'}],")
+    cols_json = ('{cols:'
+                 '[{id:"t",label:"T",type:"timeofday"},'
+                 '{id:"d",label:"d",type:"date"},'
+                 '{id:"dt",label:"dt",type:"datetime"}],')
     table = DataTable({("d", "date"): [("t", "timeofday", "T"),
                                        ("dt", "datetime")]})
     table.LoadData({date(1, 2, 3): [time(1, 2, 3)]})
@@ -345,16 +348,16 @@ class DataTableTest(unittest.TestCase):
                     date(3, 4, 5): []})
     self.assertEqual(2, table.NumberOfRows())
     self.assertEqual((cols_json + "rows:["
-                      "{c:[{v:[2,3,4],f:'time 2 3 4'},{v:new Date(2,2,4)},"
+                      "{c:[{v:[2,3,4],f:\"time 2 3 4\"},{v:new Date(2,2,4)},"
                       "{v:new Date(1,1,3,4,5,6)}]},"
                       "{c:[,{v:new Date(3,3,5)},{v:null}]}]}"),
                      table.ToJSon(columns_order=["t", "d", "dt"]))
 
-    json = ("{cols:[{id:\"a'\",label:\"a'\",type:'string'},"
-            "{id:'b',label:\"bb'\",type:'number'}],"
-            "rows:[{c:[{v:'a1'},{v:1}]},{c:[{v:'a2'},{v:2}]},"
-            "{c:[{v:'a3'},{v:3}]}]}")
-    table = DataTable({"a'": ("b", "number", "bb'", {})},
+    json = ('{cols:[{id:"a\\"",label:"a\\"",type:"string"},'
+            '{id:"b",label:"bb\\"",type:"number"}],'
+            'rows:[{c:[{v:"a1"},{v:1}]},{c:[{v:"a2"},{v:2}]},'
+            '{c:[{v:"a3"},{v:3}]}]}')
+    table = DataTable({"a\"": ("b", "number", "bb\"", {})},
                       {"a1": 1, "a2": 2, "a3": 3})
     self.assertEqual(3, table.NumberOfRows())
     self.assertEqual(json,
@@ -362,30 +365,30 @@ class DataTableTest(unittest.TestCase):
 
   def testCustomProperties(self):
     # The json of the initial data we load to the table.
-    json = ("{cols:"
-            "[{id:'a',label:'A',type:'number',p:{'col_cp':'col_v'}},"
-            "{id:'b',label:'b',type:'string'},"
-            "{id:'c',label:'c',type:'boolean'}],"
-            "rows:["
-            "{c:[{v:1},,{v:null,p:{'null_cp':'null_v'}}],p:{'row_cp':'row_v'}},"
-            "{c:[,{v:'z',p:{'cell_cp':'cell_v'}},{v:true}]},"
-            "{c:[{v:3},,{v:null}],p:{'row_cp2':'row_v2'}}],"
-            "p:{'global_cp':'global_v'}"
-            "}")
-    jscode = ("var mytab = new google.visualization.DataTable();\n"
-              "mytab.setTableProperties({'global_cp':'global_v'});\n"
-              "mytab.addColumn('number', 'A', 'a');\n"
-              "mytab.setColumnProperties(0, {'col_cp':'col_v'});\n"
-              "mytab.addColumn('string', 'b', 'b');\n"
-              "mytab.addColumn('boolean', 'c', 'c');\n"
-              "mytab.addRows(3);\n"
-              "mytab.setCell(0, 0, 1);\n"
-              "mytab.setCell(0, 2, null, null, {'null_cp':'null_v'});\n"
-              "mytab.setRowProperties(0, {'row_cp':'row_v'});\n"
-              "mytab.setCell(1, 1, 'z', null, {'cell_cp':'cell_v'});\n"
-              "mytab.setCell(1, 2, true);\n"
-              "mytab.setCell(2, 0, 3);\n"
-              "mytab.setRowProperties(2, {'row_cp2':'row_v2'});\n")
+    json = ('{cols:'
+            '[{id:"a",label:"A",type:"number",p:{"col_cp":"col_v"}},'
+            '{id:"b",label:"b",type:"string"},'
+            '{id:"c",label:"c",type:"boolean"}],'
+            'rows:['
+            '{c:[{v:1},,{v:null,p:{"null_cp":"null_v"}}],p:{"row_cp":"row_v"}},'
+            '{c:[,{v:"z",p:{"cell_cp":"cell_v"}},{v:true}]},'
+            '{c:[{v:3},,{v:null}],p:{"row_cp2":"row_v2"}}],'
+            'p:{"global_cp":"global_v"}'
+            '}')
+    jscode = ('var mytab = new google.visualization.DataTable();\n'
+              'mytab.setTableProperties({"global_cp":"global_v"});\n'
+              'mytab.addColumn("number", "A", "a");\n'
+              'mytab.setColumnProperties(0, {"col_cp":"col_v"});\n'
+              'mytab.addColumn("string", "b", "b");\n'
+              'mytab.addColumn("boolean", "c", "c");\n'
+              'mytab.addRows(3);\n'
+              'mytab.setCell(0, 0, 1);\n'
+              'mytab.setCell(0, 2, null, null, {"null_cp":"null_v"});\n'
+              'mytab.setRowProperties(0, {"row_cp":"row_v"});\n'
+              'mytab.setCell(1, 1, "z", null, {"cell_cp":"cell_v"});\n'
+              'mytab.setCell(1, 2, true);\n'
+              'mytab.setCell(2, 0, 3);\n'
+              'mytab.setRowProperties(2, {"row_cp2":"row_v2"});\n')
 
     table = DataTable([("a", "number", "A", {"col_cp": "col_v"}), "b",
                        ("c", "boolean")],
@@ -432,30 +435,30 @@ class DataTableTest(unittest.TestCase):
                      table.ToTsvExcel())
 
   def testToHtml(self):
-    html_table_header = "<html><body><table border='1'>"
-    html_table_footer = "</table></body></html>"
+    html_table_header = '<html><body><table border="1">'
+    html_table_footer = '</table></body></html>'
     init_data_html = html_table_header + (
-        "<thead><tr>"
-        "<th>A&lt;</th><th>b&gt;</th><th>c</th>"
-        "</tr></thead>"
-        "<tbody>"
-        "<tr><td>'$1'</td><td></td><td></td></tr>"
-        "<tr><td></td><td>'&lt;z&gt;'</td><td>true</td></tr>"
-        "</tbody>") + html_table_footer
+        '<thead><tr>'
+        '<th>A&lt;</th><th>b&gt;</th><th>c</th>'
+        '</tr></thead>'
+        '<tbody>'
+        '<tr><td>"$1"</td><td></td><td></td></tr>'
+        '<tr><td></td><td>"&lt;z&gt;"</td><td>true</td></tr>'
+        '</tbody>') + html_table_footer
     table = DataTable([("a", "number", "A<"), "b>", ("c", "boolean")],
                       [[(1, "$1")], [None, "<z>", True]])
     self.assertEqual(init_data_html.replace("\n", ""), table.ToHtml())
 
     init_data_html = html_table_header + (
-        "<thead><tr>"
-        "<th>T</th><th>d</th><th>dt</th>"
-        "</tr></thead>"
-        "<tbody>"
-        "<tr><td>[1,2,3]</td><td>new Date(1,1,3)</td><td></td></tr>"
-        "<tr><td>'time 2 3 4'</td><td>new Date(2,2,4)</td>"
-        "<td>new Date(1,1,3,4,5,6)</td></tr>"
-        "<tr><td></td><td>new Date(3,3,5)</td><td></td></tr>"
-        "</tbody>") + html_table_footer
+        '<thead><tr>'
+        '<th>T</th><th>d</th><th>dt</th>'
+        '</tr></thead>'
+        '<tbody>'
+        '<tr><td>[1,2,3]</td><td>new Date(1,1,3)</td><td></td></tr>'
+        '<tr><td>"time 2 3 4"</td><td>new Date(2,2,4)</td>'
+        '<td>new Date(1,1,3,4,5,6)</td></tr>'
+        '<tr><td></td><td>new Date(3,3,5)</td><td></td></tr>'
+        '</tbody>') + html_table_footer
     table = DataTable({("d", "date"): [("t", "timeofday", "T"),
                                        ("dt", "datetime")]})
     table.LoadData({date(1, 2, 3): [time(1, 2, 3)],
@@ -503,11 +506,11 @@ class DataTableTest(unittest.TestCase):
 
     start_str_default = r"google.visualization.Query.setResponse"
     start_str_handler = r"MyHandlerFunction"
-    default_params = (r"\s*'version'\s*:\s*'0.6'\s*,\s*'reqId'\s*:\s*'%s'\s*,"
-                      r"\s*'status'\s*:\s*'OK'\s*" % req_id)
-    regex1 = re.compile("%s\(\s*\{%s,\s*'table'\s*:\s*{(.*)}\s*\}\s*\);" %
+    default_params = (r'\s*"version"\s*:\s*"0.6"\s*,\s*"reqId"\s*:\s*"%s"\s*,'
+                      r'\s*"status"\s*:\s*"OK"\s*' % req_id)
+    regex1 = re.compile('%s\(\s*\{%s,\s*"table"\s*:\s*{(.*)}\s*\}\s*\);' %
                         (start_str_default, default_params))
-    regex2 = re.compile("%s\(\s*\{%s,\s*'table'\s*:\s*{(.*)}\s*\}\s*\);" %
+    regex2 = re.compile('%s\(\s*\{%s,\s*"table"\s*:\s*{(.*)}\s*\}\s*\);' %
                         (start_str_handler, default_params))
 
     json_str = table.ToJSon().strip()
