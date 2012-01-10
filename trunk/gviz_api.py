@@ -176,11 +176,10 @@ class DataTable(object):
   def _EscapeValue(v):
     """Turn a string into one that is acceptable by JavaScript.
 
-    This encoding is almost JSON spec compliant, except that we use single
-    rather than double quotes for legacy reasons (also note that the API's
-    "json" output is not actually valid JSON in other ways). We convert all
-    strings to Unicode, put them in quotes, and escape various characters such
-    as inner quotes and slashes.
+    This encoding is fully JSON spec compliant (as long as JSON_QUOTE_CHAR is
+    set to double-quote), but note that the API's "json" output is not actually
+    valid JSON in other ways. We convert all strings to Unicode, put them in
+    quotes, and escape various characters such as inner quotes and slashes.
 
     Args:
       v: The value to escape.
