@@ -18,41 +18,45 @@
 
 This library can be used to create a google.visualization.DataTable usable by
 visualizations built on the Google Visualization API. Output formats are raw
-JSON, JSON response, and JavaScript.
+JSON, JSON response, JavaScript, CSV, and HTML table.
 
 See http://code.google.com/apis/visualization/ for documentation on the
 Google Visualization API.
 """
 
-__author__ = "Amit Weinstein, Misha Seltzer"
+__author__ = "Amit Weinstein, Misha Seltzer, Jacob Baskin"
 
 import cgi
+import cStringIO
+import csv
 import datetime
+import json
 import types
-
-
-# Dictionary from characters that need to be escaped in JSON to their escaped
-# versions.
-ESCAPE_FOR_JSON = {
-    u'\\': u'\\\\',
-    u'\'': u'\\\'',
-    u'"': u'\\"',
-    u'\b': u'\\b',
-    u'\f': u'\\f',
-    u'\n': u'\\n',
-    u'\r': u'\\r',
-    u'\t': u'\\t',
-}
-
-# The character we use for quoting JSON strings (double-quote is the JSON
-# standard but Python's repr() by default uses single quotes, which is what this
-# library used to use.)
-JSON_QUOTE_CHAR = '"'
 
 
 class DataTableException(Exception):
   """The general exception object thrown by DataTable."""
   pass
+
+
+class DataTableJSONEncoder(json.JSONEncoder):
+  """JSON encoder that handles date/time/datetime objects correctly."""
+
+  def __init__(self):
+    json.JSONEncoder.__init__(self,
+                              separators=(",", ":"),
+                              ensure_ascii=False)
+
+  def default(self, o):
+    if isinstance(o, datetime.datetime):
+      return "Date(%d,%d,%d,%d,%d,%d)" % (
+          o.year, o.month - 1, o.day, o.hour, o.minute, o.second)
+    elif isinstance(o, datetime.date):
+      return "Date(%d,%d,%d)" % (o.year, o.month - 1, o.day)
+    elif isinstance(o, datetime.time):
+      return [o.hour, o.minute, o.second]
+    else:
+      return super(DataTableJSONEncoder, self).default(self, o)
 
 
 class DataTable(object):
@@ -158,57 +162,8 @@ class DataTable(object):
       self.LoadData(data)
 
   @staticmethod
-  def _EscapeValueForCsv(v):
-    """Escapes the value for use in a CSV file.
-
-    Puts the string in double-quotes, and escapes any inner double-quotes by
-    doubling them.
-
-    Args:
-      v: The value to escape.
-
-    Returns:
-      The escaped values.
-    """
-    return '"%s"' % v.replace('"', '""')
-
-  @staticmethod
-  def _EscapeValue(v):
-    """Turn a string into one that is acceptable by JavaScript.
-
-    This encoding is fully JSON spec compliant (as long as JSON_QUOTE_CHAR is
-    set to double-quote), but note that the API's "json" output is not actually
-    valid JSON in other ways. We convert all strings to Unicode, put them in
-    quotes, and escape various characters such as inner quotes and slashes.
-
-    Args:
-      v: The value to escape.
-
-    Returns:
-      The escaped value, as a Unicode string.
-    """
-
-    if isinstance(v, unicode):
-      v_unicode = v
-    else:
-      v_unicode = str(v).decode('utf-8')
-    return u'%s%s%s' % (
-        JSON_QUOTE_CHAR,
-        u''.join(ESCAPE_FOR_JSON.get(char, char) for char in v_unicode),
-        JSON_QUOTE_CHAR)
-
-  @staticmethod
-  def _EscapeCustomProperties(custom_properties):
-    """Escapes the custom properties dictionary."""
-    l = []
-    for key, value in custom_properties.iteritems():
-      l.append("%s:%s" % (DataTable._EscapeValue(key),
-                          DataTable._EscapeValue(value)))
-    return "{%s}" % ",".join(l)
-
-  @staticmethod
-  def SingleValueToJS(value, value_type, escape_func=None):
-    """Translates a single value and type into a JS value.
+  def CoerceValue(value, value_type):
+    """Coerces a single value into the type expected for its column.
 
     Internal helper method.
 
@@ -216,11 +171,10 @@ class DataTable(object):
       value: The value which should be converted
       value_type: One of "string", "number", "boolean", "date", "datetime" or
                   "timeofday".
-      escape_func: The function to use for escaping strings.
 
     Returns:
-      The proper JS format (as string) of the given value according to the
-      given value_type. For None, we simply return "null".
+      An item of the Python type appropriate to the given value_type. Strings
+      are also converted to Unicode using UTF-8 encoding if necessary.
       If a tuple is given, it should be in one of the following forms:
         - (value, formatted value)
         - (value, formatted value, custom properties)
@@ -237,17 +191,15 @@ class DataTable(object):
       any type can be used for string - as we simply take its str( ) and for
       boolean value we just check "if value".
       Examples:
-        SingleValueToJS(None, "boolean") returns "null"
-        SingleValueToJS(False, "boolean") returns "false"
-        SingleValueToJS((5, "5$"), "number") returns ("5", "'5$'")
-        SingleValueToJS((None, "5$"), "number") returns ("null", "'5$'")
+        CoerceValue(None, "string") returns None
+        CoerceValue((5, "5$"), "number") returns (5, "5$")
+        CoerceValue(100, "string") returns "100"
+        CoerceValue(0, "boolean") returns False
 
     Raises:
       DataTableException: The value and type did not match in a not-recoverable
                           way, for example given value 'abc' for type 'number'.
     """
-    if escape_func is None:
-      escape_func = DataTable._EscapeValue
     if isinstance(value, tuple):
       # In case of a tuple, we run the same function on the value itself and
       # add the formatted value.
@@ -258,54 +210,82 @@ class DataTable(object):
       if not isinstance(value[1], types.StringTypes + (types.NoneType,)):
         raise DataTableException("Formatted value is not string, given %s." %
                                  type(value[1]))
-      js_value = DataTable.SingleValueToJS(value[0], value_type)
-      if value[1] is None:
-        return (js_value, None)
-      return (js_value, escape_func(value[1]))
+      js_value = DataTable.CoerceValue(value[0], value_type)
+      return (js_value,) + value[1:]
 
-    # The standard case - no formatting.
     t_value = type(value)
     if value is None:
-      return "null"
+      return value
     if value_type == "boolean":
-      if value:
-        return "true"
-      return "false"
+      return bool(value)
 
     elif value_type == "number":
       if isinstance(value, (int, long, float)):
-        return str(value)
+        return value
       raise DataTableException("Wrong type %s when expected number" % t_value)
 
     elif value_type == "string":
-      if isinstance(value, tuple):
-        raise DataTableException("Tuple is not allowed as string value.")
-      return escape_func(value)
+      if isinstance(value, unicode):
+        return value
+      else:
+        return str(value).decode("utf-8")
 
     elif value_type == "date":
-      if not isinstance(value, (datetime.date, datetime.datetime)):
+      if isinstance(value, datetime.datetime):
+        return datetime.date(value.year, value.month, value.day)
+      elif isinstance(value, datetime.date):
+        return value
+      else:
         raise DataTableException("Wrong type %s when expected date" % t_value)
-        # We need to shift the month by 1 to match JS Date format
-      return "new Date(%d,%d,%d)" % (value.year, value.month - 1, value.day)
 
     elif value_type == "timeofday":
-      if not isinstance(value, (datetime.time, datetime.datetime)):
+      if isinstance(value, datetime.datetime):
+        return datetime.time(value.hour, value.minute, value.second)
+      elif isinstance(value, datetime.time):
+        return value
+      else:
         raise DataTableException("Wrong type %s when expected time" % t_value)
-      return "[%d,%d,%d]" % (value.hour, value.minute, value.second)
 
     elif value_type == "datetime":
-      if not isinstance(value, datetime.datetime):
+      if isinstance(value, datetime.datetime):
+        return value
+      else:
         raise DataTableException("Wrong type %s when expected datetime" %
                                  t_value)
+    # If we got here, it means the given value_type was not one of the
+    # supported types.
+    raise DataTableException("Unsupported type %s" % value_type)
+
+  @staticmethod
+  def EscapeForJSCode(encoder, value):
+    if value is None:
+      return "null"
+    elif isinstance(value, datetime.datetime):
       return "new Date(%d,%d,%d,%d,%d,%d)" % (value.year,
                                               value.month - 1,  # To match JS
                                               value.day,
                                               value.hour,
                                               value.minute,
                                               value.second)
-    # If we got here, it means the given value_type was not one of the
-    # supported types.
-    raise DataTableException("Unsupported type %s" % value_type)
+    elif isinstance(value, datetime.date):
+      return "new Date(%d,%d,%d)" % (value.year, value.month - 1, value.day)
+    else:
+      return encoder.encode(value)
+
+  @staticmethod
+  def ToString(value):
+    if value is None:
+      return "(empty)"
+    elif isinstance(value, (datetime.datetime,
+                            datetime.date,
+                            datetime.time)):
+      return str(value)
+    elif isinstance(value, unicode):
+      return value
+    elif isinstance(value, bool):
+      return str(value).lower()
+    else:
+      return str(value).decode("utf-8")
 
   @staticmethod
   def ColumnTypeParser(description):
@@ -564,7 +544,7 @@ class DataTable(object):
     """Appends new data to the table.
 
     Data is appended in rows. Data must comply with
-    the table schema passed in to __init__(). See SingleValueToJS() for a list
+    the table schema passed in to __init__(). See CoerceValue() for a list
     of acceptable data types. See the class documentation for more information
     and examples of schema and data values.
 
@@ -721,6 +701,9 @@ class DataTable(object):
     Raises:
       DataTableException: The data does not match the type.
     """
+
+    encoder = DataTableJSONEncoder()
+
     if columns_order is None:
       columns_order = [col["id"] for col in self.__columns]
     col_dict = dict([(col["id"], col) for col in self.__columns])
@@ -729,19 +712,18 @@ class DataTable(object):
     jscode = "var %s = new google.visualization.DataTable();\n" % name
     if self.custom_properties:
       jscode += "%s.setTableProperties(%s);\n" % (
-          name, DataTable._EscapeCustomProperties(self.custom_properties))
+          name, encoder.encode(self.custom_properties))
 
     # We add the columns to the table
     for i, col in enumerate(columns_order):
-      jscode += '%s.addColumn("%s", %s, %s);\n' % (
+      jscode += "%s.addColumn(%s, %s, %s);\n" % (
           name,
-          col_dict[col]["type"],
-          DataTable._EscapeValue(col_dict[col]["label"]),
-          DataTable._EscapeValue(col_dict[col]["id"]))
+          encoder.encode(col_dict[col]["type"]),
+          encoder.encode(col_dict[col]["label"]),
+          encoder.encode(col_dict[col]["id"]))
       if col_dict[col]["custom_properties"]:
         jscode += "%s.setColumnProperties(%d, %s);\n" % (
-            name, i, DataTable._EscapeCustomProperties(
-                col_dict[col]["custom_properties"]))
+            name, i, encoder.encode(col_dict[col]["custom_properties"]))
     jscode += "%s.addRows(%d);\n" % (name, len(self.__data))
 
     # We now go over the data and add each row
@@ -750,21 +732,22 @@ class DataTable(object):
       for (j, col) in enumerate(columns_order):
         if col not in row or row[col] is None:
           continue
-        cell_cp = ""
-        if isinstance(row[col], tuple) and len(row[col]) == 3:
-          cell_cp = ", %s" % DataTable._EscapeCustomProperties(row[col][2])
-        value = self.SingleValueToJS(row[col], col_dict[col]["type"])
+        value = self.CoerceValue(row[col], col_dict[col]["type"])
         if isinstance(value, tuple):
+          cell_cp = ""
+          if len(value) == 3:
+            cell_cp = ", %s" % encoder.encode(row[col][2])
           # We have a formatted value or custom property as well
-          if value[1] is None:
-            value = (value[0], "null")
           jscode += ("%s.setCell(%d, %d, %s, %s%s);\n" %
-                     (name, i, j, value[0], value[1], cell_cp))
+                     (name, i, j,
+                      self.EscapeForJSCode(encoder, value[0]),
+                      self.EscapeForJSCode(encoder, value[1]), cell_cp))
         else:
-          jscode += "%s.setCell(%d, %d, %s);\n" % (name, i, j, value)
+          jscode += "%s.setCell(%d, %d, %s);\n" % (
+              name, i, j, self.EscapeForJSCode(encoder, value))
       if cp:
         jscode += "%s.setRowProperties(%d, %s);\n" % (
-            name, i, DataTable._EscapeCustomProperties(cp))
+            name, i, encoder.encode(cp))
     return jscode
 
   def ToHtml(self, columns_order=None, order_by=()):
@@ -819,19 +802,22 @@ class DataTable(object):
         # For empty string we want empty quotes ("").
         value = ""
         if col in row and row[col] is not None:
-          value = self.SingleValueToJS(row[col], col_dict[col]["type"])
+          value = self.CoerceValue(row[col], col_dict[col]["type"])
         if isinstance(value, tuple):
           # We have a formatted value and we're going to use it
-          cells_list.append(cell_template % cgi.escape(value[1]))
+          cells_list.append(cell_template % cgi.escape(self.ToString(value[1])))
         else:
-          cells_list.append(cell_template % cgi.escape(value))
+          cells_list.append(cell_template % cgi.escape(self.ToString(value)))
       rows_list.append(row_template % "".join(cells_list))
     rows_html = rows_template % "".join(rows_list)
 
     return table_template % (columns_html + rows_html)
 
-  def ToCsv(self, columns_order=None, order_by=(), separator=", "):
+  def ToCsv(self, columns_order=None, order_by=(), separator=","):
     """Writes the data table as a CSV string.
+
+    Output is encoded in UTF-8 because the Python "csv" module can't handle
+    Unicode properly according to its documentation.
 
     Args:
       columns_order: Optional. Specifies the order of columns in the
@@ -846,48 +832,42 @@ class DataTable(object):
     Returns:
       A CSV string representing the table.
       Example result:
-       'a', 'b', 'c'
-       1, 'z', 2
-       3, 'w', ''
+       'a','b','c'
+       1,'z',2
+       3,'w',''
 
     Raises:
       DataTableException: The data does not match the type.
     """
+
+    csv_buffer = cStringIO.StringIO()
+    writer = csv.writer(csv_buffer, delimiter=separator)
+
     if columns_order is None:
       columns_order = [col["id"] for col in self.__columns]
     col_dict = dict([(col["id"], col) for col in self.__columns])
 
-    columns_list = []
-    for col in columns_order:
-      columns_list.append(DataTable._EscapeValueForCsv(col_dict[col]["label"]))
-    columns_line = separator.join(columns_list)
+    writer.writerow([col_dict[col]["label"].encode("utf-8")
+                     for col in columns_order])
 
-    rows_list = []
     # We now go over the data and add each row
     for row, unused_cp in self._PreparedData(order_by):
       cells_list = []
       # We add all the elements of this row by their order
       for col in columns_order:
-        value = '""'
+        value = ""
         if col in row and row[col] is not None:
-          value = self.SingleValueToJS(row[col], col_dict[col]["type"],
-                                       DataTable._EscapeValueForCsv)
+          value = self.CoerceValue(row[col], col_dict[col]["type"])
         if isinstance(value, tuple):
           # We have a formatted value. Using it only for date/time types.
           if col_dict[col]["type"] in ["date", "datetime", "timeofday"]:
-            cells_list.append(value[1])
+            cells_list.append(self.ToString(value[1]).encode("utf-8"))
           else:
-            cells_list.append(value[0])
+            cells_list.append(self.ToString(value[0]).encode("utf-8"))
         else:
-          # We need to quote date types, because they contain commas.
-          if (col_dict[col]["type"] in ["date", "datetime", "timeofday"] and
-              value != '""'):
-            value = '"%s"' % value
-          cells_list.append(value)
-      rows_list.append(separator.join(cells_list))
-    rows = "\n".join(rows_list)
-
-    return "%s\n%s" % (columns_line, rows)
+          cells_list.append(self.ToString(value).encode("utf-8"))
+      writer.writerow(cells_list)
+    return csv_buffer.getvalue()
 
   def ToTsvExcel(self, columns_order=None, order_by=()):
     """Returns a file in tab-separated-format readable by MS Excel.
@@ -902,11 +882,66 @@ class DataTable(object):
     Returns:
       A tab-separated little endian UTF16 file representing the table.
     """
-    return self.ToCsv(
-        columns_order, order_by, separator="\t").encode("UTF-16LE")
+    return (self.ToCsv(columns_order, order_by, separator="\t")
+            .decode("utf-8").encode("UTF-16LE"))
+
+  def _ToJSonObj(self, columns_order=None, order_by=()):
+    """Returns an object suitable to be converted to JSON.
+
+    Args:
+      columns_order: Optional. A list of all column IDs in the order in which
+                     you want them created in the output table. If specified,
+                     all column IDs must be present.
+      order_by: Optional. Specifies the name of the column(s) to sort by.
+                Passed as is to _PreparedData().
+
+    Returns:
+      A dictionary object for use by ToJSon or ToJSonResponse.
+    """
+    if columns_order is None:
+      columns_order = [col["id"] for col in self.__columns]
+    col_dict = dict([(col["id"], col) for col in self.__columns])
+
+    # Creating the column JSON objects
+    col_objs = []
+    for col_id in columns_order:
+      col_obj = {"id": col_dict[col_id]["id"],
+                 "label": col_dict[col_id]["label"],
+                 "type": col_dict[col_id]["type"]}
+      if col_dict[col_id]["custom_properties"]:
+        col_obj["p"] = col_dict[col_id]["custom_properties"]
+      col_objs.append(col_obj)
+
+    # Creating the rows jsons
+    row_objs = []
+    for row, cp in self._PreparedData(order_by):
+      cell_objs = []
+      for col in columns_order:
+        value = self.CoerceValue(row.get(col, None), col_dict[col]["type"])
+        if value is None:
+          cell_obj = None
+        elif isinstance(value, tuple):
+          cell_obj = {"v": value[0]}
+          if len(value) > 1 and value[1] is not None:
+            cell_obj["f"] = value[1]
+          if len(value) == 3:
+            cell_obj["p"] = value[2]
+        else:
+          cell_obj = {"v": value}
+        cell_objs.append(cell_obj)
+      row_obj = {"c": cell_objs}
+      if cp:
+        row_obj["p"] = cp
+      row_objs.append(row_obj)
+
+    json_obj = {"cols": col_objs, "rows": row_objs}
+    if self.custom_properties:
+      json_obj["p"] = self.custom_properties
+
+    return json_obj
 
   def ToJSon(self, columns_order=None, order_by=()):
-    """Writes a JSON string that can be used in a JS DataTable constructor.
+    """Returns a string that can be used in a JS DataTable constructor.
 
     This method writes a JSON string that can be passed directly into a Google
     Visualization API DataTable constructor. Use this output if you are
@@ -942,65 +977,10 @@ class DataTable(object):
     Raises:
       DataTableException: The data does not match the type.
     """
-    if columns_order is None:
-      columns_order = [col["id"] for col in self.__columns]
-    col_dict = dict([(col["id"], col) for col in self.__columns])
 
-    # Creating the columns jsons
-    cols_jsons = []
-    for col_id in columns_order:
-      d = dict(col_dict[col_id])
-      d["id"] = DataTable._EscapeValue(d["id"])
-      d["label"] = DataTable._EscapeValue(d["label"])
-      d["cp"] = ""
-      if col_dict[col_id]["custom_properties"]:
-        d["cp"] = ",p:%s" % DataTable._EscapeCustomProperties(
-            col_dict[col_id]["custom_properties"])
-      d["q"] = JSON_QUOTE_CHAR
-      cols_jsons.append(
-          '{id:%(id)s,label:%(label)s,type:%(q)s%(type)s%(q)s%(cp)s}' % d)
-
-    # Creating the rows jsons
-    rows_jsons = []
-    for row, cp in self._PreparedData(order_by):
-      cells_jsons = []
-      for col in columns_order:
-        # We omit the {v:null} for a None value of the not last column
-        value = row.get(col, None)
-        if value is None and col != columns_order[-1]:
-          cells_jsons.append("")
-        else:
-          value = self.SingleValueToJS(value, col_dict[col]["type"])
-          if isinstance(value, tuple):
-            # We have a formatted value or custom property as well
-            if len(row.get(col)) == 3:
-              if value[1] is None:
-                cells_jsons.append("{v:%s,p:%s}" % (
-                    value[0],
-                    DataTable._EscapeCustomProperties(row.get(col)[2])))
-              else:
-                cells_jsons.append("{v:%s,f:%s,p:%s}" % (value + (
-                    DataTable._EscapeCustomProperties(row.get(col)[2]),)))
-            else:
-              cells_jsons.append("{v:%s,f:%s}" % value)
-          else:
-            cells_jsons.append("{v:%s}" % value)
-      if cp:
-        rows_jsons.append("{c:[%s],p:%s}" % (
-            ",".join(cells_jsons), DataTable._EscapeCustomProperties(cp)))
-      else:
-        rows_jsons.append("{c:[%s]}" % ",".join(cells_jsons))
-
-    general_custom_properties = ""
-    if self.custom_properties:
-      general_custom_properties = (
-          ",p:%s" % DataTable._EscapeCustomProperties(self.custom_properties))
-
-    # We now join the columns jsons and the rows jsons
-    json = "{cols:[%s],rows:[%s]%s}" % (",".join(cols_jsons),
-                                        ",".join(rows_jsons),
-                                        general_custom_properties)
-    return json.encode('utf-8')
+    encoder = DataTableJSONEncoder()
+    return encoder.encode(
+        self._ToJSonObj(columns_order, order_by)).encode("utf-8")
 
   def ToJSonResponse(self, columns_order=None, order_by=(), req_id=0,
                      response_handler="google.visualization.Query.setResponse"):
@@ -1030,15 +1010,16 @@ class DataTable(object):
     Note: The URL returning this string can be used as a data source by Google
           Visualization Gadgets or from JS code.
     """
-    table = self.ToJSon(columns_order, order_by)
-    return ('%(handler)s({%(q)sversion%(q)s:%(q)s0.6%(q)s, '
-            '%(q)sreqId%(q)s:%(q)s%(req_id)s%(q)s, '
-            '%(q)sstatus%(q)s:%(q)sOK%(q)s, '
-            '%(q)stable%(q)s: %(table)s});') % {
-                'handler': response_handler,
-                'req_id': req_id,
-                'table': table,
-                'q': JSON_QUOTE_CHAR}
+
+    response_obj = {
+        "version": "0.6",
+        "reqId": str(req_id),
+        "table": self._ToJSonObj(columns_order, order_by),
+        "status": "ok"
+    }
+    encoder = DataTableJSONEncoder()
+    return "%s(%s);" % (response_handler,
+                        encoder.encode(response_obj).encode("utf-8"))
 
   def ToResponse(self, columns_order=None, order_by=(), tqx=""):
     """Writes the right response according to the request string passed in tqx.
