@@ -21,7 +21,10 @@ __author__ = "Amit Weinstein"
 from datetime import date
 from datetime import datetime
 from datetime import time
-import json
+try:
+  import json
+except ImportError:
+  import simplejson as json
 import unittest
 
 from gviz_api import DataTable
