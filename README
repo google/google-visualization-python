@@ -18,3 +18,8 @@ Installing the library:
 
 Testing the library:
   python ./setup.py test
+
+Dependencies:
+  On Python <2.6 you will need to have simplejson[1] installed on your system.
+
+  [1]: http://pypi.python.org/pypi/simplejson/
