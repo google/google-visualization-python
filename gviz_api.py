@@ -52,8 +52,15 @@ class DataTableJSONEncoder(json.JSONEncoder):
 
   def default(self, o):
     if isinstance(o, datetime.datetime):
-      return "Date(%d,%d,%d,%d,%d,%d)" % (
-          o.year, o.month - 1, o.day, o.hour, o.minute, o.second)
+      if o.microsecond == 0:
+        # If the time doesn't have ms-resolution, leave it out to keep
+        # things smaller.
+        return "Date(%d,%d,%d,%d,%d,%d)" % (
+            o.year, o.month - 1, o.day, o.hour, o.minute, o.second)
+      else:
+        return "Date(%d,%d,%d,%d,%d,%d,%d)" % (
+            o.year, o.month - 1, o.day, o.hour, o.minute, o.second,
+            o.microsecond / 1000)
     elif isinstance(o, datetime.date):
       return "Date(%d,%d,%d)" % (o.year, o.month - 1, o.day)
     elif isinstance(o, datetime.time):
@@ -264,12 +271,22 @@ class DataTable(object):
     if value is None:
       return "null"
     elif isinstance(value, datetime.datetime):
-      return "new Date(%d,%d,%d,%d,%d,%d)" % (value.year,
-                                              value.month - 1,  # To match JS
-                                              value.day,
-                                              value.hour,
-                                              value.minute,
-                                              value.second)
+      if value.microsecond == 0:
+        # If it's not ms-resolution, leave that out to save space.
+        return "new Date(%d,%d,%d,%d,%d,%d)" % (value.year,
+                                                value.month - 1,  # To match JS
+                                                value.day,
+                                                value.hour,
+                                                value.minute,
+                                                value.second)
+      else:
+        return "new Date(%d,%d,%d,%d,%d,%d,%d)" % (value.year,
+                                                   value.month - 1,  # match JS
+                                                   value.day,
+                                                   value.hour,
+                                                   value.minute,
+                                                   value.second,
+                                                   value.microsecond / 1000)
     elif isinstance(value, datetime.date):
       return "new Date(%d,%d,%d)" % (value.year, value.month - 1, value.day)
     else:
