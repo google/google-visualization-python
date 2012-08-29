@@ -83,8 +83,9 @@ class DataTableTest(unittest.TestCase):
                                            "timeofday"))
     self.assertEqual(None, DataTable.CoerceValue(None, "timeofday"))
 
-    self.assertEqual(datetime(2001, 2, 3, 4, 5, 6),
-                     DataTable.CoerceValue(datetime(2001, 2, 3, 4, 5, 6),
+    self.assertEqual(datetime(2001, 2, 3, 4, 5, 6, 555000),
+                     DataTable.CoerceValue(datetime(2001, 2, 3, 4, 5, 6,
+                                                    555000),
                                            "datetime"))
     self.assertEqual(None, DataTable.CoerceValue(None, "datetime"))
     self.assertEqual((None, "none"),
@@ -292,18 +293,21 @@ class DataTableTest(unittest.TestCase):
     table = DataTable({("a", "number"): {"b": "date", "c": "datetime"}},
                       {1: {},
                        2: {"b": date(1, 2, 3)},
-                       3: {"c": datetime(1, 2, 3, 4, 5, 6)}})
-    self.assertEqual(3, table.NumberOfRows())
+                       3: {"c": datetime(1, 2, 3, 4, 5, 6, 555000)},
+                       4: {"c": datetime(1, 2, 3, 4, 5, 6)}})
+    self.assertEqual(4, table.NumberOfRows())
     self.assertEqual(("var mytab2 = new google.visualization.DataTable();\n"
                       'mytab2.addColumn("datetime", "c", "c");\n'
                       'mytab2.addColumn("date", "b", "b");\n'
                       'mytab2.addColumn("number", "a", "a");\n'
-                      'mytab2.addRows(3);\n'
+                      'mytab2.addRows(4);\n'
                       'mytab2.setCell(0, 2, 1);\n'
                       'mytab2.setCell(1, 1, new Date(1,1,3));\n'
                       'mytab2.setCell(1, 2, 2);\n'
-                      'mytab2.setCell(2, 0, new Date(1,1,3,4,5,6));\n'
-                      'mytab2.setCell(2, 2, 3);\n'),
+                      'mytab2.setCell(2, 0, new Date(1,1,3,4,5,6,555));\n'
+                      'mytab2.setCell(2, 2, 3);\n'
+                      'mytab2.setCell(3, 0, new Date(1,1,3,4,5,6));\n'
+                      'mytab2.setCell(3, 2, 4);\n'),
                      table.ToJSCode("mytab2", columns_order=["c", "b", "a"]))
 
   def testToJSon(self):
@@ -351,11 +355,11 @@ class DataTableTest(unittest.TestCase):
     json_obj["rows"] = [
         {"c": [{"v": [2, 3, 4], "f": "time 2 3 4"},
                {"v": "Date(2,2,4)"},
-               {"v": "Date(1,1,3,4,5,6)"}]},
+               {"v": "Date(1,1,3,4,5,6,555)"}]},
         {"c": [None, {"v": "Date(3,3,5)"}, None]}]
 
     table.LoadData({date(2, 3, 4): [(time(2, 3, 4), "time 2 3 4"),
-                                    datetime(1, 2, 3, 4, 5, 6)],
+                                    datetime(1, 2, 3, 4, 5, 6, 555000)],
                     date(3, 4, 5): []})
     self.assertEqual(2, table.NumberOfRows())
 
