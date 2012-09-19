@@ -66,7 +66,7 @@ class DataTableJSONEncoder(json.JSONEncoder):
     elif isinstance(o, datetime.time):
       return [o.hour, o.minute, o.second]
     else:
-      return super(DataTableJSONEncoder, self).default(self, o)
+      return super(DataTableJSONEncoder, self).default(o)
 
 
 class DataTable(object):
