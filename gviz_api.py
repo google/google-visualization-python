@@ -991,7 +991,7 @@ class DataTable(object):
        {cols: [{id:"a",label:"a",type:"number"},
                {id:"b",label:"b",type:"string"},
               {id:"c",label:"c",type:"number"}],
-        rows: [{c:[{v:1},{v:"z"},{v:2}]}, c:{[{v:3,f:"3$"},{v:"w"},{v:null}]}],
+        rows: [{c:[{v:1},{v:"z"},{v:2}]}, c:{[{v:3,f:"3$"},{v:"w"},null]}],
         p:    {'foo': 'bar'}}
 
     Raises:
