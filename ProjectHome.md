@@ -1,0 +1,6 @@
+This project is a helper python library for providers who want to implement a data source for visualizations built on the [Google Visualization API](http://code.google.com/apis/visualization/).
+
+  * **Documentation** - See [the API documentation](http://code.google.com/apis/visualization/documentation/dev/gviz_api_lib.html) for details about how to use this library.
+  * **Installation** - See [the README file](http://code.google.com/p/google-visualization-python/source/browse/trunk/README) for installation instructions.
+  * **Samples** - You can see sample code illustrating how to use the library [here](http://code.google.com/p/google-visualization-python/source/browse/#svn/trunk/examples). A running version of the static sample is [here](http://google-visualization.appspot.com/python/static_example), and a running version of the dynamic version is [here](http://google-visualization.appspot.com/python/dynamic_example).
+> (Please note that the dynamic example is not a full html page example but rather is an actual data source url that you can plug into a google.visualization.Query object (or a Google Visualization Gadget). See documentation at: http://code.google.com/apis/visualization/documentation/queries.html and http://code.google.com/apis/visualization/documentation/usinggadgets.html)
