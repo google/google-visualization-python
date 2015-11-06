@@ -230,6 +230,8 @@ class DataTable(object):
       return bool(value)
 
     elif value_type == "number":
+      if value != value or value == float('Inf') or value == float('-Inf'):
+        return None
       if isinstance(value, (int, long, float)):
         return value
       raise DataTableException("Wrong type %s when expected number" % t_value)

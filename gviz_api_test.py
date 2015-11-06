@@ -62,6 +62,9 @@ class DataTableTest(unittest.TestCase):
     self.assertEqual(1., DataTable.CoerceValue(1., "number"))
     self.assertEqual(-5, DataTable.CoerceValue(-5, "number"))
     self.assertEqual(None, DataTable.CoerceValue(None, "number"))
+    self.assertEqual(None, DataTable.CoerceValue(float('NaN'), "number"))
+    self.assertEqual(None, DataTable.CoerceValue(float('Inf'), "number"))
+    self.assertEqual(None, DataTable.CoerceValue(float('-Inf'), "number"))
     self.assertEqual((5, u"5$"),
                      DataTable.CoerceValue((5, "5$"), "number"))
 
