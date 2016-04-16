@@ -165,9 +165,7 @@ class DataTable(object):
     """
     self.__columns = self.TableDescriptionParser(table_description)
     self.__data = []
-    self.custom_properties = {}
-    if custom_properties is not None:
-      self.custom_properties = custom_properties
+    self.custom_properties = custom_properties or {}
     if data:
       self.LoadData(data)
 
