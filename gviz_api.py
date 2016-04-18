@@ -52,15 +52,11 @@ class DataTableJSONEncoder(json.JSONEncoder):
 
   def default(self, o):
     if isinstance(o, datetime.datetime):
-      if o.microsecond == 0:
-        # If the time doesn't have ms-resolution, leave it out to keep
-        # things smaller.
-        return "Date(%d,%d,%d,%d,%d,%d)" % (
-            o.year, o.month - 1, o.day, o.hour, o.minute, o.second)
-      else:
-        return "Date(%d,%d,%d,%d,%d,%d,%d)" % (
-            o.year, o.month - 1, o.day, o.hour, o.minute, o.second,
-            o.microsecond / 1000)
+      # If the time doesn't have ms-resolution, leave it out to keep
+      # things smaller.
+      microsec = ",%d" % o.microsecond / 1000 if o.microsecond else ""
+      return "Date(%d,%d,%d,%d,%d,%d%s)" % (
+          o.year, o.month - 1, o.day, o.hour, o.minute, o.second, microsec)
     elif isinstance(o, datetime.date):
       return "Date(%d,%d,%d)" % (o.year, o.month - 1, o.day)
     elif isinstance(o, datetime.time):
@@ -269,22 +265,15 @@ class DataTable(object):
     if value is None:
       return "null"
     elif isinstance(value, datetime.datetime):
-      if value.microsecond == 0:
-        # If it's not ms-resolution, leave that out to save space.
-        return "new Date(%d,%d,%d,%d,%d,%d)" % (value.year,
-                                                value.month - 1,  # To match JS
-                                                value.day,
-                                                value.hour,
-                                                value.minute,
-                                                value.second)
-      else:
-        return "new Date(%d,%d,%d,%d,%d,%d,%d)" % (value.year,
-                                                   value.month - 1,  # match JS
-                                                   value.day,
-                                                   value.hour,
-                                                   value.minute,
-                                                   value.second,
-                                                   value.microsecond / 1000)
+      # If it's not ms-resolution, leave that out to save space.
+      microsec = ",%d" % value.microsecond / 1000 if value.microsecond else ""
+      return "new Date(%d,%d,%d,%d,%d,%d%s)" % (value.year,
+                                                 value.month - 1,  # match JS
+                                                 value.day,
+                                                 value.hour,
+                                                 value.minute,
+                                                 value.second,
+                                                 microsec)
     elif isinstance(value, datetime.date):
       return "new Date(%d,%d,%d)" % (value.year, value.month - 1, value.day)
     else:
@@ -722,8 +711,7 @@ class DataTable(object):
 
     encoder = DataTableJSONEncoder()
 
-    if columns_order is None:
-      columns_order = [col["id"] for col in self.__columns]
+    columns_order = columns_order or [col["id"] for col in self.__columns]
     col_dict = dict([(col["id"], col) for col in self.__columns])
 
     # We first create the table with the given name
@@ -801,15 +789,10 @@ class DataTable(object):
     header_cell_template = "<th>%s</th>"
     cell_template = "<td>%s</td>"
 
-    if columns_order is None:
-      columns_order = [col["id"] for col in self.__columns]
+    columns_order = columns_order or [col["id"] for col in self.__columns]
     col_dict = dict([(col["id"], col) for col in self.__columns])
-
-    columns_list = []
-    for col in columns_order:
-      columns_list.append(header_cell_template %
-                          cgi.escape(col_dict[col]["label"]))
-    columns_html = columns_template % "".join(columns_list)
+    columns_html = columns_template % "".join(header_cell_template %
+        cgi.escape(col_dict[col]["label"]) for col in columns_order)
 
     rows_list = []
     # We now go over the data and add each row
@@ -861,8 +844,7 @@ class DataTable(object):
     csv_buffer = cStringIO.StringIO()
     writer = csv.writer(csv_buffer, delimiter=separator)
 
-    if columns_order is None:
-      columns_order = [col["id"] for col in self.__columns]
+    columns_order = columns_order or [col["id"] for col in self.__columns]
     col_dict = dict([(col["id"], col) for col in self.__columns])
 
     writer.writerow([col_dict[col]["label"].encode("utf-8")
@@ -916,8 +898,7 @@ class DataTable(object):
     Returns:
       A dictionary object for use by ToJSon or ToJSonResponse.
     """
-    if columns_order is None:
-      columns_order = [col["id"] for col in self.__columns]
+    columns_order = columns_order or [col["id"] for col in self.__columns]
     col_dict = dict([(col["id"], col) for col in self.__columns])
 
     # Creating the column JSON objects
