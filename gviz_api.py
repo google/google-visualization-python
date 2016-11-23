@@ -143,7 +143,8 @@ class DataTable(object):
     3  4  w
   """
 
-  def __init__(self, table_description, data=None, custom_properties=None):
+  def __init__(self, table_description, data=None, custom_properties=None,
+               json_encoder=None):
     """Initialize the data table from a table schema and (optionally) data.
 
     See the class documentation for more information on table schema and data
@@ -173,6 +174,7 @@ class DataTable(object):
       self.custom_properties = custom_properties
     if data:
       self.LoadData(data)
+    self.encoder = json_encoder if json_encoder else DataTableJSONEncoder()
 
   @staticmethod
   def CoerceValue(value, value_type):
@@ -725,8 +727,6 @@ class DataTable(object):
       DataTableException: The data does not match the type.
     """
 
-    encoder = DataTableJSONEncoder()
-
     if columns_order is None:
       columns_order = [col["id"] for col in self.__columns]
     col_dict = dict([(col["id"], col) for col in self.__columns])
@@ -735,18 +735,18 @@ class DataTable(object):
     jscode = "var %s = new google.visualization.DataTable();\n" % name
     if self.custom_properties:
       jscode += "%s.setTableProperties(%s);\n" % (
-          name, encoder.encode(self.custom_properties))
+          name, self.encoder.encode(self.custom_properties))
 
     # We add the columns to the table
     for i, col in enumerate(columns_order):
       jscode += "%s.addColumn(%s, %s, %s);\n" % (
           name,
-          encoder.encode(col_dict[col]["type"]),
-          encoder.encode(col_dict[col]["label"]),
-          encoder.encode(col_dict[col]["id"]))
+          self.encoder.encode(col_dict[col]["type"]),
+          self.encoder.encode(col_dict[col]["label"]),
+          self.encoder.encode(col_dict[col]["id"]))
       if col_dict[col]["custom_properties"]:
         jscode += "%s.setColumnProperties(%d, %s);\n" % (
-            name, i, encoder.encode(col_dict[col]["custom_properties"]))
+            name, i, self.encoder.encode(col_dict[col]["custom_properties"]))
     jscode += "%s.addRows(%d);\n" % (name, len(self.__data))
 
     # We now go over the data and add each row
@@ -759,18 +759,18 @@ class DataTable(object):
         if isinstance(value, tuple):
           cell_cp = ""
           if len(value) == 3:
-            cell_cp = ", %s" % encoder.encode(row[col][2])
+            cell_cp = ", %s" % self.encoder.encode(row[col][2])
           # We have a formatted value or custom property as well
           jscode += ("%s.setCell(%d, %d, %s, %s%s);\n" %
                      (name, i, j,
-                      self.EscapeForJSCode(encoder, value[0]),
-                      self.EscapeForJSCode(encoder, value[1]), cell_cp))
+                      self.EscapeForJSCode(self.encoder, value[0]),
+                      self.EscapeForJSCode(self.encoder, value[1]), cell_cp))
         else:
           jscode += "%s.setCell(%d, %d, %s);\n" % (
-              name, i, j, self.EscapeForJSCode(encoder, value))
+              name, i, j, self.EscapeForJSCode(self.encoder, value))
       if cp:
         jscode += "%s.setRowProperties(%d, %s);\n" % (
-            name, i, encoder.encode(cp))
+            name, i, self.encoder.encode(cp))
     return jscode
 
   def ToHtml(self, columns_order=None, order_by=()):
@@ -1001,8 +1001,7 @@ class DataTable(object):
       DataTableException: The data does not match the type.
     """
 
-    encoder = DataTableJSONEncoder()
-    return encoder.encode(
+    return self.encoder.encode(
         self._ToJSonObj(columns_order, order_by)).encode("utf-8")
 
   def ToJSonResponse(self, columns_order=None, order_by=(), req_id=0,
@@ -1040,9 +1039,8 @@ class DataTable(object):
         "table": self._ToJSonObj(columns_order, order_by),
         "status": "ok"
     }
-    encoder = DataTableJSONEncoder()
     return "%s(%s);" % (response_handler,
-                        encoder.encode(response_obj).encode("utf-8"))
+                        self.encoder.encode(response_obj).encode("utf-8"))
 
   def ToResponse(self, columns_order=None, order_by=(), tqx=""):
     """Writes the right response according to the request string passed in tqx.
