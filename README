@@ -23,3 +23,6 @@ Dependencies:
   On Python <2.6 you will need to have simplejson[1] installed on your system.
 
   [1]: http://pypi.python.org/pypi/simplejson/
+
+If you need to access the google vizualization api on Python 3 try the gviz_api_py3.py file.
+Although tests have not yet been re-written for python 3, it provides support to access Google Charts, etc.
