@@ -16,44 +16,40 @@
 
 """Setup module for Google Visualization Python API."""
 
-__author__ = "Misha Seltzer"
-
-import distutils.core
-import unittest
-import gviz_api_test
+from setuptools import setup, find_packages
+from codecs import open
+from os import path
 
 
-class TestCommand(distutils.core.Command):
-  """Class that provides the 'test' command for setup."""
-  user_options = []
-
-  def initialize_options(self):
-    """Must override this method in the Command class."""
-    pass
-
-  def finalize_options(self):
-    """Must override this method in the Command class."""
-    pass
-
-  def run(self):
-    """The run method - running the tests on invocation."""
-    suite = unittest.TestLoader().loadTestsFromTestCase(
-        gviz_api_test.DataTableTest)
-    unittest.TextTestRunner().run(suite)
+here = path.abspath(path.dirname(__file__))
+with open(path.join(here, "README"), encoding="utf-8") as f:
+  long_description = f.read()
 
 
-distutils.core.setup(
-    name="gviz_api.py",
-    version="1.8.2",
+setup(
+    name="gviz_api",
+    version="1.9.0",
     description="Python API for Google Visualization",
-    long_description="""
-The Python API for Google Visualization makes it easy to convert python data
-structures into Google Visualization JS code, DataTable JSon construction
-string or JSon response for Query object.
-""".strip(),
-    author="Amit Weinstein, Misha Seltzer",
+    long_description=long_description,
+    url="https://github.com/google/google-visualization-python",
+    author="Amit Weinstein, Misha Seltzer, Jacob Baskin",
     license="Apache 2.0",
-    url="http://code.google.com/p/google-visualization-python/",
+    classifiers=[
+        "Development Status :: 5 - Production/Stable",
+        "Intended Audience :: Developers",
+        "Topic :: Software Development :: Libraries :: Python Modules",
+        "License :: OSI Approved :: Apache Software License",
+        "Programming Language :: Python :: 2",
+        "Programming Language :: Python :: 2.6",
+        "Programming Language :: Python :: 2.7",
+        "Programming Language :: Python :: 3",
+        "Programming Language :: Python :: 3.3",
+        "Programming Language :: Python :: 3.4",
+        "Programming Language :: Python :: 3.5",
+        "Programming Language :: Python :: 3.6",
+    ],
+    keywords="gviz,google visualization",
     py_modules=["gviz_api"],
-    cmdclass={"test": TestCommand},
+    install_requires=["six"],
+    test_suite="gviz_api_test",
 )

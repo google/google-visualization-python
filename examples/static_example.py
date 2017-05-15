@@ -73,7 +73,7 @@ def main():
                            order_by="salary")
 
   # Putting the JS code and JSon string into the template
-  print page_template % vars()
+  print(page_template % vars())
 
 
 if __name__ == "__main__":

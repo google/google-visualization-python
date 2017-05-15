@@ -27,6 +27,8 @@ except ImportError:
   import simplejson as json
 import unittest
 
+import six
+
 from gviz_api import DataTable
 from gviz_api import DataTableException
 
@@ -106,7 +108,7 @@ class DataTableTest(unittest.TestCase):
     json_obj = json.loads(table.ToJSon())
     for i, row in enumerate(json_obj["rows"]):
       utf8_str = the_strings[i]
-      if isinstance(utf8_str, unicode):
+      if isinstance(utf8_str, six.text_type):
         utf8_str = utf8_str.encode("utf-8")
 
       out_str = row["c"][0]["v"]
@@ -237,9 +239,9 @@ class DataTableTest(unittest.TestCase):
                       table.AppendData, [[1, "a", True]])
     self.assertRaises(DataTableException,
                       table.AppendData, {1: ["a"], 2: ["b"]})
-    self.assertEquals(None, table.AppendData([[1, "a"], [2, "b"]]))
+    self.assertEqual(None, table.AppendData([[1, "a"], [2, "b"]]))
     self.assertEqual(2, table.NumberOfRows())
-    self.assertEquals(None, table.AppendData([[3, "c"], [4]]))
+    self.assertEqual(None, table.AppendData([[3, "c"], [4]]))
     self.assertEqual(4, table.NumberOfRows())
 
     table = DataTable({"a": "number", "b": "string"})
@@ -248,7 +250,7 @@ class DataTableTest(unittest.TestCase):
                       table.AppendData, [[1, "a"]])
     self.assertRaises(DataTableException,
                       table.AppendData, {5: {"b": "z"}})
-    self.assertEquals(None, table.AppendData([{"a": 1, "b": "z"}]))
+    self.assertEqual(None, table.AppendData([{"a": 1, "b": "z"}]))
     self.assertEqual(1, table.NumberOfRows())
 
     table = DataTable({("a", "number"): [("b", "string")]})
@@ -257,7 +259,7 @@ class DataTableTest(unittest.TestCase):
                       table.AppendData, [[1, "a"]])
     self.assertRaises(DataTableException,
                       table.AppendData, {5: {"b": "z"}})
-    self.assertEquals(None, table.AppendData({5: ["z"], 6: ["w"]}))
+    self.assertEqual(None, table.AppendData({5: ["z"], 6: ["w"]}))
     self.assertEqual(2, table.NumberOfRows())
 
     table = DataTable({("a", "number"): {"b": "string", "c": "number"}})
@@ -266,7 +268,7 @@ class DataTableTest(unittest.TestCase):
                       table.AppendData, [[1, "a"]])
     self.assertRaises(DataTableException,
                       table.AppendData, {1: ["a", 2]})
-    self.assertEquals(None, table.AppendData({5: {"b": "z", "c": 6},
+    self.assertEqual(None, table.AppendData({5: {"b": "z", "c": 6},
                                               7: {"c": 8},
                                               9: {}}))
     self.assertEqual(3, table.NumberOfRows())
@@ -327,17 +329,23 @@ class DataTableTest(unittest.TestCase):
                        [None, u"\u05d0"],
                        [None, u"\u05d1".encode("utf-8")]])
     self.assertEqual(4, table.NumberOfRows())
+    result = table.ToJSon()
+    if not isinstance(result, six.text_type):
+      result = result.decode("utf-8")
     self.assertEqual(json.dumps(json_obj,
                                 separators=(",", ":"),
-                                ensure_ascii=False).encode("utf-8"),
-                     table.ToJSon())
+                                ensure_ascii=False),
+                     result)
     table.AppendData([[-1, "w", False]])
     self.assertEqual(5, table.NumberOfRows())
     json_obj["rows"].append({"c": [{"v": -1}, {"v": "w"}, {"v": False}]})
+    result = table.ToJSon()
+    if not isinstance(result, six.text_type):
+      result = result.decode("utf-8")
     self.assertEqual(json.dumps(json_obj,
                                 separators=(",", ":"),
-                                ensure_ascii=False).encode("utf-8"),
-                     table.ToJSon())
+                                ensure_ascii=False),
+                     result)
 
     json_obj = {"cols":
                 [{"id": "t", "label": "T", "type": "timeofday"},
@@ -433,7 +441,7 @@ class DataTableTest(unittest.TestCase):
     self.assertEqual(init_data_csv, table.ToCsv())
     table.AppendData([[-1, "w", False]])
     init_data_csv = "%s%s\r\n" % (init_data_csv, "-1,w,false")
-    self.assertEquals(init_data_csv, table.ToCsv())
+    self.assertEqual(init_data_csv, table.ToCsv())
 
     init_data_csv = "\r\n".join([
         "T,d,dt",
@@ -456,7 +464,10 @@ class DataTableTest(unittest.TestCase):
                     date(1902, 3, 4): [(time(2, 3, 4), 'time "2 3 4"'),
                                        datetime(1901, 2, 3, 4, 5, 6)],
                     date(1903, 4, 5): []})
-    self.assertEqual(table.ToCsv().replace(",", "\t").encode("UTF-16LE"),
+    csv_string = table.ToCsv()
+    if not isinstance(csv_string, six.text_type):
+        csv_string = csv_string.decode("utf-8")
+    self.assertEqual(csv_string.replace(",", "\t").encode("UTF-16LE"),
                      table.ToTsvExcel())
 
   def testToHtml(self):
@@ -536,36 +547,36 @@ class DataTableTest(unittest.TestCase):
 
     json_response = table.ToJSonResponse(req_id=req_id)
 
-    self.assertEquals(json_response.find(start_str_default + "("), 0)
+    self.assertEqual(json_response.find(start_str_default + "("), 0)
 
     json_response_obj = json.loads(json_response[len(start_str_default) + 1:-2])
-    self.assertEquals(json_response_obj["table"], json.loads(json_str))
-    self.assertEquals(json_response_obj["version"], "0.6")
-    self.assertEquals(json_response_obj["reqId"], str(req_id))
-    self.assertEquals(json_response_obj["status"], "ok")
+    self.assertEqual(json_response_obj["table"], json.loads(json_str))
+    self.assertEqual(json_response_obj["version"], "0.6")
+    self.assertEqual(json_response_obj["reqId"], str(req_id))
+    self.assertEqual(json_response_obj["status"], "ok")
 
     json_response = table.ToJSonResponse(req_id=req_id,
                                          response_handler=start_str_handler)
 
-    self.assertEquals(json_response.find(start_str_handler + "("), 0)
+    self.assertEqual(json_response.find(start_str_handler + "("), 0)
     json_response_obj = json.loads(json_response[len(start_str_handler) + 1:-2])
-    self.assertEquals(json_response_obj["table"], json.loads(json_str))
+    self.assertEqual(json_response_obj["table"], json.loads(json_str))
 
   def testToResponse(self):
     description = ["col1", "col2", "col3"]
     data = [("1", "2", "3"), ("a", "b", "c"), ("One", "Two", "Three")]
     table = DataTable(description, data)
 
-    self.assertEquals(table.ToResponse(), table.ToJSonResponse())
-    self.assertEquals(table.ToResponse(tqx="out:csv"), table.ToCsv())
-    self.assertEquals(table.ToResponse(tqx="out:html"), table.ToHtml())
+    self.assertEqual(table.ToResponse(), table.ToJSonResponse())
+    self.assertEqual(table.ToResponse(tqx="out:csv"), table.ToCsv())
+    self.assertEqual(table.ToResponse(tqx="out:html"), table.ToHtml())
     self.assertRaises(DataTableException, table.ToResponse, tqx="version:0.1")
-    self.assertEquals(table.ToResponse(tqx="reqId:4;responseHandler:handle"),
+    self.assertEqual(table.ToResponse(tqx="reqId:4;responseHandler:handle"),
                       table.ToJSonResponse(req_id=4, response_handler="handle"))
-    self.assertEquals(table.ToResponse(tqx="out:csv;reqId:4"), table.ToCsv())
-    self.assertEquals(table.ToResponse(order_by="col2"),
+    self.assertEqual(table.ToResponse(tqx="out:csv;reqId:4"), table.ToCsv())
+    self.assertEqual(table.ToResponse(order_by="col2"),
                       table.ToJSonResponse(order_by="col2"))
-    self.assertEquals(table.ToResponse(tqx="out:html",
+    self.assertEqual(table.ToResponse(tqx="out:html",
                                        columns_order=("col3", "col2", "col1")),
                       table.ToHtml(columns_order=("col3", "col2", "col1")))
     self.assertRaises(ValueError, table.ToResponse, tqx="SomeWrongTqxFormat")
