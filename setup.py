@@ -16,17 +16,18 @@
 
 """Setup module for Google Visualization Python API."""
 
-from setuptools import setup, find_packages
-from codecs import open
-from os import path
+import codecs
+import os.path
+
+import setuptools
 
 
-here = path.abspath(path.dirname(__file__))
-with open(path.join(here, "README.rst"), encoding="utf-8") as f:
+here = os.path.abspath(os.path.dirname(__file__))
+with codecs.open(os.path.join(here, "README.rst"), encoding="utf-8") as f:
   long_description = f.read()
 
 
-setup(
+setuptools.setup(
     name="gviz_api",
     version="1.9.0",
     description="Python API for Google Visualization",

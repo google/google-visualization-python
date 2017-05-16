@@ -500,9 +500,9 @@ class DataTable(object):
     # dictionary).
     # NOTE: this way of differentiating might create ambiguity. See docs.
     if (len(table_description) != 1 or
-        (isinstance(sorted(table_description.keys())[0], six.string_types) and
-         isinstance(sorted(table_description.values())[0], tuple) and
-         len(sorted(table_description.values())[0]) < 4)):
+        (isinstance(next(six.iterkeys(table_description)), six.string_types) and
+         isinstance(next(six.itervalues(table_description)), tuple) and
+         len(next(six.itervalues(table_description))) < 4)):
       # This is the most inner dictionary. Parsing types.
       columns = []
       # We sort the items, equivalent to sort the keys since they are unique

@@ -269,8 +269,8 @@ class DataTableTest(unittest.TestCase):
     self.assertRaises(DataTableException,
                       table.AppendData, {1: ["a", 2]})
     self.assertEqual(None, table.AppendData({5: {"b": "z", "c": 6},
-                                              7: {"c": 8},
-                                              9: {}}))
+                                             7: {"c": 8},
+                                             9: {}}))
     self.assertEqual(3, table.NumberOfRows())
 
   def testToJSCode(self):
