@@ -30,10 +30,10 @@ data = [{"name": "Mike", "salary": (10000, "$10,000"), "full_time": True},
 
 data_table = gviz_api.DataTable(description)
 data_table.LoadData(data)
-print "Content-type: text/plain"
-print
-print data_table.ToJSonResponse(columns_order=("name", "salary", "full_time"),
-                                order_by="salary")
+print("Content-type: text/plain")
+print()
+print(data_table.ToJSonResponse(columns_order=("name", "salary", "full_time"),
+                                order_by="salary"))
 
 # Put the url (http://google-visualization.appspot.com/python/dynamic_example)
 # as your Google Visualization data source.
