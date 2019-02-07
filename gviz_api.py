@@ -32,6 +32,7 @@ try:
   import html  # Python version 3.2 or higher
 except ImportError:
   import cgi as html  # Only used for .escape()
+import numbers
 import json
 import types
 
@@ -231,7 +232,7 @@ class DataTable(object):
       return bool(value)
 
     elif value_type == "number":
-      if isinstance(value, six.integer_types + (float,)):
+      if isinstance(value, numbers.Number):
         return value
       raise DataTableException("Wrong type %s when expected number" % t_value)
 
