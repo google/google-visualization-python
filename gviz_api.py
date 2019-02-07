@@ -232,8 +232,10 @@ class DataTable(object):
       return bool(value)
 
     elif value_type == "number":
-      if isinstance(value, numbers.Number):
-        return value
+      if isinstance(value, numbers.Integral):
+        return int(value)
+      if isinstance(value, numbers.Real):
+        return float(value)
       raise DataTableException("Wrong type %s when expected number" % t_value)
 
     elif value_type == "string":
