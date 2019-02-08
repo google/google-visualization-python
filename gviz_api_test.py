@@ -22,6 +22,7 @@ from datetime import date
 from datetime import datetime
 from datetime import time
 import decimal
+import fractions
 try:
   import json
 except ImportError:
@@ -65,6 +66,7 @@ class DataTableTest(unittest.TestCase):
     self.assertEqual(1., DataTable.CoerceValue(1., "number"))
     self.assertEqual(-5, DataTable.CoerceValue(-5, "number"))
     self.assertEqual(0.5, DataTable.CoerceValue(decimal.Decimal("0.5"), "number"))
+    self.assertEqual(0.5, DataTable.CoerceValue(fractions.Fraction(1, 2), "number"))
     self.assertEqual(None, DataTable.CoerceValue(None, "number"))
     self.assertEqual((5, u"5$"),
                      DataTable.CoerceValue((5, "5$"), "number"))

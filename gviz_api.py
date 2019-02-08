@@ -28,6 +28,7 @@ __author__ = "Amit Weinstein, Misha Seltzer, Jacob Baskin"
 
 import csv
 import datetime
+import decimal
 try:
   import html  # Python version 3.2 or higher
 except ImportError:
@@ -234,7 +235,7 @@ class DataTable(object):
     elif value_type == "number":
       if isinstance(value, numbers.Integral):
         return int(value)
-      if isinstance(value, numbers.Real):
+      if isinstance(value, (numbers.Real, decimal.Decimal)):
         return float(value)
       raise DataTableException("Wrong type %s when expected number" % t_value)
 
