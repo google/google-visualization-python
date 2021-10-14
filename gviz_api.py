@@ -28,10 +28,12 @@ __author__ = "Amit Weinstein, Misha Seltzer, Jacob Baskin"
 
 import csv
 import datetime
+import decimal
 try:
   import html  # Python version 3.2 or higher
 except ImportError:
   import cgi as html  # Only used for .escape()
+import numbers
 import json
 import types
 
@@ -231,8 +233,10 @@ class DataTable(object):
       return bool(value)
 
     elif value_type == "number":
-      if isinstance(value, six.integer_types + (float,)):
-        return value
+      if isinstance(value, numbers.Integral):
+        return int(value)
+      if isinstance(value, (numbers.Real, decimal.Decimal)):
+        return float(value)
       raise DataTableException("Wrong type %s when expected number" % t_value)
 
     elif value_type == "string":
