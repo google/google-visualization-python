@@ -29,7 +29,7 @@ with codecs.open(os.path.join(here, "README.rst"), encoding="utf-8") as f:
 
 setuptools.setup(
     name="gviz_api",
-    version="1.9.0",
+    version="1.10.0",
     description="Python API for Google Visualization",
     long_description=long_description,
     url="https://github.com/google/google-visualization-python",
@@ -48,6 +48,10 @@ setuptools.setup(
         "Programming Language :: Python :: 3.4",
         "Programming Language :: Python :: 3.5",
         "Programming Language :: Python :: 3.6",
+        "Programming Language :: Python :: 3.7",
+        "Programming Language :: Python :: 3.8",
+        "Programming Language :: Python :: 3.9",
+        "Programming Language :: Python :: 3.10",
     ],
     keywords="gviz,google visualization",
     py_modules=["gviz_api"],
